@@ -4,6 +4,7 @@
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
+    "moduleResolution": "Bundler",
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
@@ -28,6 +29,6 @@
       "@lib/*": ["./lib/*"]
     }
   },
-  "include": ["apps/web/src"],
+  "include": ["apps/web/src", "apps/web/vite.env.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
