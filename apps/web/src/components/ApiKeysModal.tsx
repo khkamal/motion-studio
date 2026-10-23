@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DEFAULT_GEMINI_MODEL } from '../services/gemini';
 import { z } from 'zod';
 import { testGeminiConfiguration } from '../services/gemini';
 import { maskApiKey } from '../services/keyStorage';
@@ -19,7 +20,7 @@ export function ApiKeysModal({ open, onClose, onPersist }: ApiKeysModalProps) {
   const activeApiId = useEditorStore((state) => state.activeApiId);
   const [label, setLabel] = useState('My Gemini key');
   const [key, setKey] = useState('');
-  const [model, setModel] = useState(() => import.meta.env.VITE_GEMINI_MODEL?.trim() || 'gemini-2.5-flash');
+  const [model, setModel] = useState(() => import.meta.env.VITE_GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL);
   const [importText, setImportText] = useState('');
   const [notice, setNotice] = useState('');
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export function ApiKeysModal({ open, onClose, onPersist }: ApiKeysModalProps) {
       setNotice('Enter a valid Gemini API key first.');
       return;
     }
-    const entry: ApiKeyConfig = { id: crypto.randomUUID(), label: label.trim() || 'Gemini configuration', key: key.trim(), model: model.trim() || 'gemini-2.5-flash', enabled: true };
+    const entry: ApiKeyConfig = { id: crypto.randomUUID(), label: label.trim() || 'Gemini configuration', key: key.trim(), model: model.trim() || DEFAULT_GEMINI_MODEL, enabled: true };
     const next = [...configs, entry];
     update(next, activeApiId ?? entry.id);
     setKey('');
@@ -66,7 +67,7 @@ export function ApiKeysModal({ open, onClose, onPersist }: ApiKeysModalProps) {
       const parsed: unknown = JSON.parse(importText);
       const checked = z.array(ImportedConfigSchema).max(30).parse(parsed);
       const next = [...configs, ...checked.map((entry) => ({
-        id: crypto.randomUUID(), label: entry.label, key: entry.key, model: entry.model?.trim() || 'gemini-2.5-flash', enabled: true,
+        id: crypto.randomUUID(), label: entry.label, key: entry.key, model: entry.model?.trim() || DEFAULT_GEMINI_MODEL, enabled: true,
       }))];
       if (next.length > 30) throw new Error('The limit is 30 configurations.');
       update(next, activeApiId ?? next.find((entry) => entry.enabled)?.id ?? null);
@@ -96,7 +97,7 @@ export function ApiKeysModal({ open, onClose, onPersist }: ApiKeysModalProps) {
         <label className="form-field"><span>Gemini API key</span><input className="text-input api-key-entry" type="password" autoComplete="off" value={key} onChange={(event) => setKey(event.target.value)} placeholder="Paste an API key" /></label>
         <button className="button-primary full-width" onClick={addConfig} disabled={!key.trim()}><Icon name="plus" size={14} /> Add key</button>
       </div>
-      <details className="import-keys-details"><summary>Import multiple configurations <Icon name="chevron" size={13} /></summary><p>Paste a JSON array of objects with <code>label</code>, <code>key</code>, and optional <code>model</code> fields. The file is processed locally.</p><textarea className="manual-prompt-input import-keys-input" value={importText} onChange={(event) => setImportText(event.target.value)} placeholder={'[{"label":"Studio key","key":"…","model":"gemini-2.5-flash"}]'} /><button className="button-secondary full-width" disabled={!importText.trim()} onClick={importConfigs}>Import configurations</button></details>
+      <details className="import-keys-details"><summary>Import multiple configurations <Icon name="chevron" size={13} /></summary><p>Paste a JSON array of objects with <code>label</code>, <code>key</code>, and optional <code>model</code> fields. The file is processed locally.</p><textarea className="manual-prompt-input import-keys-input" value={importText} onChange={(event) => setImportText(event.target.value)} placeholder={'[{"label":"Studio key","key":"…","model":"gemini-3.1-flash-lite"}]'} /><button className="button-secondary full-width" disabled={!importText.trim()} onClick={importConfigs}>Import configurations</button></details>
       {notice && <div className="modal-notice">{notice}</div>}
       <div className="modal-footer"><span>One selected configuration is used per request. No automatic quota-circumvention rotation.</span><button className="button-secondary" onClick={onClose}>Done</button></div>
     </section>

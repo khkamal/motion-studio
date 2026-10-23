@@ -130,6 +130,7 @@ export function ExportModal({ open, onClose, capabilities }: ExportModalProps) {
     useEditorStore.getState().setExportProgress({ active: true, cancelled: false, currentFrame: 0, totalFrames, startedAt: performance.now(), message: 'Preparing renderer…' });
     try {
       const exported = await exportMotionVideo({
+        recreate: state.recreateScene,
         asset: state.asset,
         plan: state.plan,
         settings: state.settings,

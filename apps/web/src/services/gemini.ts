@@ -4,7 +4,7 @@ import { normalizePlan } from '../engine/planBuilder';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MAX_IMAGE_EDGE = 1400;
 
-interface GeminiResponse {
+export interface GeminiResponse {
   candidates?: Array<{
     content?: { parts?: Array<{ text?: string }> };
     finishReason?: string;
@@ -21,7 +21,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function makeVisionPayload(blob: Blob): Promise<{ mimeType: string; data: string }> {
+export async function makeVisionPayload(blob: Blob): Promise<{ mimeType: string; data: string }> {
   const bitmap = await createImageBitmap(blob);
   try {
     const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
@@ -85,7 +85,7 @@ Supported motion types: translation, rotation, scale, swing, float, drift, orbit
 Supported layer kinds: background, subject, camera, lighting, particles, effect. Main subject ID must match its subject layer ID; every motion.targetId must match the containing layer ID. Every movingRegions.subjectId must reference a subject layer. Keyframe values for x/y are normalized scene offsets, rotation is degrees, scale is a delta from 1, opacity is 0..1, and wave/glow/light are normalized values. Keep numeric changes subtle and non-static. The background layer must have no motions/keyframes. For every visible secondary subject, add a subject and matching subject layer (subject_2, etc.) and identify its moving/stable image regions. A model-estimated mask is never pixel segmentation: without a registered trusted mask provider, the renderer keeps its background intact and applies only clipped local material/light motion within the estimated region.`;
 }
 
-function getResponseText(response: GeminiResponse): string {
+export function getResponseText(response: GeminiResponse): string {
   if (response.error?.message) throw new Error(response.error.message);
   const candidate = response.candidates?.[0];
   const text = candidate?.content?.parts?.map((part) => part.text ?? '').join('').trim();
@@ -135,29 +135,60 @@ function validateAndNormalize(text: string, duration: number, fps: MotionPlan['f
   return normalizePlan(validation.data, duration, fps, 'gemini');
 }
 
-async function requestGemini(config: ApiKeyConfig, parts: Array<Record<string, unknown>>, signal?: AbortSignal, json = true): Promise<GeminiResponse> {
-  const model = config.model.trim().replace(/^models\//, '');
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite';
+const resolvedModels = new Map<string, string>();
+
+async function sendGemini(config: ApiKeyConfig, model: string, parts: Array<Record<string, unknown>>, signal: AbortSignal | undefined, json: boolean): Promise<{ ok: boolean; status: number; payload: GeminiResponse }> {
   if (!/^[A-Za-z0-9._-]+$/.test(model)) throw new Error('Model name contains unsupported characters.');
   const response = await fetch(`${API_BASE}/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': config.key,
-    },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.key },
     body: JSON.stringify({
       contents: [{ role: 'user', parts }],
       generationConfig: json
-        ? { temperature: 0.25, responseMimeType: 'application/json', maxOutputTokens: 8192 }
+        ? { temperature: 0.25, responseMimeType: 'application/json', maxOutputTokens: 16384 }
         : { temperature: 0, maxOutputTokens: 32 },
     }),
     signal,
   });
-  const payload = await response.json() as GeminiResponse;
-  if (!response.ok) {
-    const safeMessage = payload.error?.message ?? `Gemini request failed with HTTP ${response.status}.`;
+  return { ok: response.ok, status: response.status, payload: (await response.json()) as GeminiResponse };
+}
+
+/** Asks the API which models this key can use and picks the newest plain "flash" model. */
+async function discoverModel(config: ApiKeyConfig, signal?: AbortSignal): Promise<string | null> {
+  const response = await fetch(`${API_BASE}?pageSize=200`, { headers: { 'x-goog-api-key': config.key }, signal });
+  if (!response.ok) return null;
+  const data = (await response.json()) as { models?: Array<{ name?: string; supportedGenerationMethods?: string[] }> };
+  const candidates = (data.models ?? [])
+    .filter((m) => m.name && m.supportedGenerationMethods?.includes('generateContent'))
+    .map((m) => (m.name as string).replace(/^models\//, ''));
+  if (candidates.includes(DEFAULT_GEMINI_MODEL)) return DEFAULT_GEMINI_MODEL;
+  const plain = candidates
+    .map((name) => ({ name, match: /^gemini-(\d+(?:\.\d+)?)-flash$/.exec(name) }))
+    .filter((c): c is { name: string; match: RegExpExecArray } => c.match !== null)
+    .sort((a, b) => parseFloat(b.match[1]) - parseFloat(a.match[1]));
+  if (plain.length) return plain[0].name;
+  if (candidates.includes('gemini-flash-latest')) return 'gemini-flash-latest';
+  return candidates.find((n) => /flash/.test(n) && !/lite|image|tts|live|embed|audio/.test(n)) ?? null;
+}
+
+export async function requestGemini(config: ApiKeyConfig, parts: Array<Record<string, unknown>>, signal?: AbortSignal, json = true): Promise<GeminiResponse> {
+  const configured = config.model.trim().replace(/^models\//, '');
+  const first = resolvedModels.get(configured) ?? configured;
+  let result = await sendGemini(config, first, parts, signal, json);
+  const retired = !result.ok && (result.status === 404 || /no longer available|not found|deprecated|not supported for generateContent/i.test(result.payload.error?.message ?? ''));
+  if (retired) {
+    const replacement = await discoverModel(config, signal);
+    if (replacement && replacement !== first) {
+      resolvedModels.set(configured, replacement);
+      result = await sendGemini(config, replacement, parts, signal, json);
+    }
+  }
+  if (!result.ok) {
+    const safeMessage = result.payload.error?.message ?? `Gemini request failed with HTTP ${result.status}.`;
     throw new Error(safeMessage.slice(0, 400));
   }
-  return payload;
+  return result.payload;
 }
 
 export async function generateGeminiMotionPlan(

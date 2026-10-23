@@ -10,7 +10,9 @@ import { applyLocalMotionPrompt } from '../engine/manualEdits';
 import { buildFallbackPlan, normalizePlan, suggestSeo } from '../engine/planBuilder';
 import { detectBrowserCapabilities } from '../services/capabilities';
 import { generateGeminiMotionPlan, reviseGeminiMotionPlan } from '../services/gemini';
+import { buildLocalRecreateScene, generateRecreateScene, reviseRecreateScene } from '../services/recreateGemini';
 import { loadApiConfigs, saveApiConfigs } from '../services/keyStorage';
+import { suggestIdea } from '../services/recreateGemini';
 import { exportProjectFile, importProjectFile, loadAutosave, saveAutosave } from '../services/projectStorage';
 import { useEditorStore, selectActiveApiConfig } from '../store/editorStore';
 import type { BrowserCapabilities, EditorSettingsPatch, MediaAsset } from '../types/motion';
@@ -26,6 +28,19 @@ function downloadProject(blob: Blob, name: string) {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Gemini (or the local writer, without a key) proposes a motion idea for the uploaded image and puts it in the editable idea box. */
+async function requestIdea(previous = ''): Promise<void> {
+  const start = useEditorStore.getState();
+  const asset = start.asset;
+  if (!asset) return;
+  const id = asset.id;
+  start.beginIdea();
+  const idea = await suggestIdea(selectActiveApiConfig(start) ?? null, asset, previous).catch(() => null);
+  const now = useEditorStore.getState();
+  if (!idea || now.asset?.id !== id) return;
+  now.setIdea(idea.text, idea.source);
 }
 
 export function App() {
@@ -77,6 +92,7 @@ export function App() {
       store.setAsset(restoredAsset);
       store.updateSettings(saved.settings);
       store.setPlan(restoredPlan, false);
+      store.setHasGenerated(true);
       store.setProjectName(saved.name);
       store.clearHistory();
       store.setDirty(false);
@@ -187,6 +203,7 @@ export function App() {
       store.setActiveLayer('subject_1');
       store.setDirty(true);
       notify(`Loaded ${nextAsset.name} · ${nextAsset.width} × ${nextAsset.height}`);
+      void requestIdea();
     } catch (error) {
       notify(error instanceof Error ? error.message : 'The image could not be loaded.');
     }
@@ -211,6 +228,34 @@ export function App() {
     state.setGenerationError('');
     state.setGenerationMessage('Analyzing the image and planning subject motion…');
     const activeConfig = selectActiveApiConfig(state);
+    if (state.generationMode === 'animate') useEditorStore.getState().setHasGenerated(true);
+    if (state.generationMode !== 'animate') {
+      const forceIcon = state.generationMode === 'icon';
+      try {
+        let scene;
+        if (activeConfig) {
+          state.setGenerationMessage('Reading the reference design and choreographing the animation…');
+          scene = await generateRecreateScene(activeConfig, state.asset, state.settings.duration, state.directionPrompt, undefined, state.settings.width / state.settings.height, forceIcon);
+        } else {
+          scene = await buildLocalRecreateScene(state.asset, state.settings.duration, state.directionPrompt, state.settings.width / state.settings.height, forceIcon);
+          useEditorStore.getState().setGenerationError('No Gemini key: built a new ribbon animation locally from the reference colours. Add a key for designs with text or layouts.');
+        }
+        if (useEditorStore.getState().asset?.id !== sourceAssetId) return;
+        useEditorStore.getState().setRecreateScene(scene);
+        useEditorStore.getState().setGenerationMessage(`Recreated "${scene.title}" with ${scene.elements.length} animated elements.`);
+        notify('Reference recreated as a motion graphic.');
+      } catch (error) {
+        const current = useEditorStore.getState();
+        if (current.asset?.id !== sourceAssetId) return;
+        try { current.setRecreateScene(await buildLocalRecreateScene(current.asset!, current.settings.duration, current.directionPrompt, current.settings.width / current.settings.height, forceIcon)); } catch { /* keep previous scene */ }
+        useEditorStore.getState().setGenerationMessage('Gemini could not recreate the design; a local draft layout is shown instead.');
+        useEditorStore.getState().setGenerationError(error instanceof Error ? error.message : 'Recreate failed.');
+        notify('Recreate failed · local draft shown.');
+      } finally {
+        useEditorStore.getState().setIsGenerating(false);
+      }
+      return;
+    }
     try {
       if (!activeConfig) {
         const fallback = buildFallbackPlan({ fileName: state.asset.name, width: state.asset.width, height: state.asset.height, duration: state.settings.duration, fps: state.settings.fps, style: state.settings.style, selectedType: state.selectedSubjectType });
@@ -257,6 +302,22 @@ export function App() {
 
   const handleManualPrompt = async (prompt: string) => {
     const state = useEditorStore.getState();
+    if (state.recreateScene && state.generationMode !== 'animate') {
+      const cfg = selectActiveApiConfig(state);
+      if (!cfg) { state.setGenerationError('Add a Gemini key to edit the scene with a prompt.'); return; }
+      state.setIsGenerating(true);
+      state.setGenerationError('');
+      try {
+        const revised = await reviseRecreateScene(cfg, state.recreateScene, prompt);
+        useEditorStore.getState().setRecreateScene(revised);
+        useEditorStore.getState().setGenerationMessage('Scene updated from your prompt.');
+      } catch (error) {
+        useEditorStore.getState().setGenerationError(error instanceof Error ? error.message : 'Scene edit failed.');
+      } finally {
+        useEditorStore.getState().setIsGenerating(false);
+      }
+      return;
+    }
     if (!state.plan) return;
     const activeConfig = selectActiveApiConfig(state);
     state.setIsGenerating(true);
@@ -324,6 +385,7 @@ export function App() {
       store.setAsset(importedAsset);
       store.updateSettings(project.settings);
       store.setPlan(importedPlan, false);
+      store.setHasGenerated(true);
       store.setProjectName(project.name);
       store.clearHistory();
       store.setDirty(true);
@@ -376,7 +438,7 @@ export function App() {
     <main className="studio-grid">
       <SourcePanel asset={asset} settings={settings} subjectType={selectedSubjectType} onPick={handlePickImage} onRemove={handleRemoveImage} onTypeChange={(type) => useEditorStore.getState().setSelectedSubjectType(type)} onSettingsChange={updateSettings} />
       <div className="workspace-and-timeline"><PreviewStage onUpload={handlePickImage} /><Timeline /></div>
-      <Inspector isGenerating={isGenerating} apiConfigured={Boolean(activeConfig)} onGenerate={handleGenerate} onManualPrompt={handleManualPrompt} onOpenKeys={() => setShowKeyModal(true)} />
+      <Inspector isGenerating={isGenerating} apiConfigured={Boolean(activeConfig)} onGenerate={handleGenerate} onNewIdea={() => void requestIdea(useEditorStore.getState().directionPrompt)} onManualPrompt={handleManualPrompt} onOpenKeys={() => setShowKeyModal(true)} />
     </main>
     <input ref={imageInputRef} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" onChange={(event) => { const files = event.target.files ? Array.from(event.target.files) : []; if (files.length) void handleImageFiles(files); event.currentTarget.value = ''; }} />
     <input ref={projectInputRef} className="hidden-file-input" type="file" accept=".motion,application/vnd.motion-studio.project+json,application/json" onChange={(event) => { void handleOpenProjectFile(event.target.files?.[0]); event.currentTarget.value = ''; }} />

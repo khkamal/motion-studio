@@ -11,6 +11,7 @@ interface InspectorProps {
   onGenerate: () => void;
   onManualPrompt: (prompt: string) => void;
   onOpenKeys: () => void;
+  onNewIdea: () => void;
 }
 
 function PrioritySlider({ label, value, onChange, detail, color = 'blue', onStart }: { label: string; value: number; onChange: (value: number) => void; detail: string; color?: string; onStart?: () => void }) {
@@ -21,10 +22,14 @@ function PrioritySlider({ label, value, onChange, detail, color = 'blue', onStar
   </label>;
 }
 
-function MotionPanel({ isGenerating, apiConfigured, onGenerate, onManualPrompt, onOpenKeys }: InspectorProps) {
+function MotionPanel({ isGenerating, apiConfigured, onGenerate, onManualPrompt, onOpenKeys, onNewIdea }: InspectorProps) {
   const plan = useEditorStore((state) => state.plan);
   const settings = useEditorStore((state) => state.settings);
   const [prompt, setPrompt] = useState('');
+  const generationMode = useEditorStore((state) => state.generationMode);
+  const recreateScene = useEditorStore((state) => state.recreateScene);
+  const directionPrompt = useEditorStore((state) => state.directionPrompt);
+  const ideaStatus = useEditorStore((state) => state.ideaStatus);
   const updatePriority = (key: keyof EditorSettings['priorities'], value: number) => useEditorStore.getState().setPriority(key, value, false);
   const captureHistory = () => useEditorStore.getState().captureHistory();
   const updatePlan = (updater: (current: MotionPlan) => MotionPlan, recordHistory = true) => useEditorStore.getState().updatePlan(updater, recordHistory);
@@ -45,14 +50,27 @@ function MotionPanel({ isGenerating, apiConfigured, onGenerate, onManualPrompt, 
   return <div className="inspector-scroll motion-inspector">
     <div className="inspector-headline"><div><span className="panel-eyebrow"><span>02</span> MOTION DIRECTION</span><h2>Make it move.</h2></div><span className={`vision-badge ${plan?.source === 'gemini' ? 'vision-ai' : ''}`}><Icon name={plan?.source === 'gemini' ? 'sparkles' : 'wand'} size={12} />{plan?.source === 'gemini' ? 'VISION PLAN' : 'LOCAL DRAFT'}</span></div>
 
+    <div className="generation-mode-toggle" role="group" aria-label="Generation mode" style={{ display: 'flex', gap: 6, margin: '8px 0' }}>
+      {([['recreate', 'New design'], ['icon', 'Animate icon'], ['animate', 'Animate photo']] as const).map(([mode, label]) => (
+        <button key={mode} className={generationMode === mode ? 'button-primary' : 'button-secondary'} style={{ flex: 1 }} onClick={() => useEditorStore.getState().setGenerationMode(mode)}>{label}</button>
+      ))}
+    </div>
+    {generationMode !== 'animate' && recreateScene && <div className="inline-ai-notice"><span className="status-dot" /><span>{recreateScene.title} · {recreateScene.elements.length} elements. Edit with a prompt below, e.g. “slower headline, add glow”.</span></div>}
+    {generationMode !== 'animate' && <div className="direction-field" style={{ margin: '8px 0' }}>
+      <div className="section-title-row"><h3>MOTION IDEA</h3>
+        <span className="section-chip">{ideaStatus === 'loading' ? 'WRITING…' : ideaStatus === 'ai' ? 'GEMINI IDEA' : ideaStatus === 'local' ? 'LOCAL IDEA' : 'YOUR IDEA'}</span>
+      </div>
+      <textarea className="manual-prompt-input" rows={5} maxLength={800} value={directionPrompt} disabled={false} onChange={(event) => useEditorStore.getState().setDirectionPrompt(event.target.value)} placeholder={ideaStatus === 'loading' ? 'Gemini is reading your image and writing a motion idea…' : 'Describe the motion in your own words, e.g. the arrows spin continuously and the cloud pulses slowly.'} />
+      <div className="prompt-examples">Edit the idea if you like, then press the button. <button onClick={onNewIdea} disabled={ideaStatus === 'loading' || !useEditorStore.getState().asset}>New idea</button></div>
+    </div>}
     <button className="generate-motion-button" onClick={onGenerate} disabled={isGenerating || !useEditorStore.getState().asset}>
       {isGenerating ? <span className="loading-spinner small" /> : <Icon name="sparkles" size={16} />}
-      <span>{isGenerating ? 'Analyzing image…' : 'Generate Motion'}</span>
+      <span>{isGenerating ? 'Analyzing image…' : generationMode === 'animate' ? 'Generate Motion' : (recreateScene ? 'Recreate with this idea' : 'Recreate as Motion Graphic')}</span>
       {!isGenerating && <span className="generate-arrow"><Icon name="arrow" size={14} /></span>}
     </button>
     {!apiConfigured && <div className="inline-ai-notice"><span className="status-dot" /><span>Using deterministic local draft. <button onClick={onOpenKeys}>Add Gemini key</button> for vision analysis.</span></div>}
 
-    {plan && <>
+    {plan && generationMode === 'animate' && <>
       <div className="motion-concept-card">
         <div className="concept-card-top"><span className="concept-spark"><Icon name="sparkles" size={13} /></span><span>MOTION CONCEPT</span><span className="concept-type-chip">{subjectType}</span></div>
         <p>{plan.concept.summary}</p>

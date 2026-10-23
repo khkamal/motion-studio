@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { RecreateScene } from '../engine/recreate';
 import { DEFAULT_SETTINGS, type ApiKeyConfig, type EditorSettings, type EditorSettingsPatch, type ExportProgress, type MediaAsset, type MotionPlan } from '../types/motion';
 
 export type InspectorTab = 'motion' | 'presets' | 'seo' | 'export';
@@ -11,6 +12,16 @@ export interface HistorySnapshot {
 interface EditorState {
   asset: MediaAsset | null;
   plan: MotionPlan | null;
+  recreateScene: RecreateScene | null;
+  /** True once the person has run Generate (or opened a saved project). Heavy local masking waits for this. */
+  hasGenerated: boolean;
+  generationMode: 'recreate' | 'icon' | 'animate';
+  /** Typed design direction for Recreate, e.g. "dark neon background, orbit layout, coins". */
+  directionPrompt: string;
+  /** loading: the AI is writing a motion idea for the uploaded image. ai / local: where the text in the box came from. */
+  ideaStatus: 'idle' | 'loading' | 'ai' | 'local';
+  /** true once the person has typed in the box, so an automatic idea never replaces their words. */
+  ideaEdited: boolean;
   settings: EditorSettings;
   currentTime: number;
   isPlaying: boolean;
@@ -29,6 +40,12 @@ interface EditorState {
   isDirty: boolean;
   setAsset(asset: MediaAsset | null): void;
   clearScene(): void;
+  setRecreateScene(scene: RecreateScene | null): void;
+  setGenerationMode(mode: 'recreate' | 'icon' | 'animate'): void;
+  setDirectionPrompt(value: string): void;
+  beginIdea(): void;
+  setIdea(text: string, source: 'ai' | 'local'): void;
+  setHasGenerated(value: boolean): void;
   setPlan(plan: MotionPlan | null, recordHistory?: boolean): void;
   updatePlan(updater: (plan: MotionPlan) => MotionPlan, recordHistory?: boolean): void;
   updateSettings(patch: EditorSettingsPatch, recordHistory?: boolean): void;
@@ -59,6 +76,12 @@ const pushHistory = (stack: HistorySnapshot[], entry: HistorySnapshot) => [...st
 export const useEditorStore = create<EditorState>((set, get) => ({
   asset: null,
   plan: null,
+  recreateScene: null,
+  hasGenerated: false,
+  generationMode: 'icon',
+  directionPrompt: '',
+  ideaStatus: 'idle',
+  ideaEdited: false,
   settings: cloneSettings(),
   currentTime: 0,
   isPlaying: false,
@@ -75,8 +98,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   redoStack: [],
   projectName: 'Untitled motion',
   isDirty: false,
-  setAsset: (asset) => set({ asset, currentTime: 0, isPlaying: false, isDirty: true }),
-  clearScene: () => set({ asset: null, plan: null, currentTime: 0, isPlaying: false, generationMessage: '', generationError: '', undoStack: [], redoStack: [], isDirty: true }),
+  setAsset: (asset) => set({ asset, hasGenerated: false, currentTime: 0, isPlaying: false, isDirty: true }),
+  setHasGenerated: (hasGenerated) => set({ hasGenerated }),
+  setRecreateScene: (recreateScene) => set({ recreateScene, currentTime: 0, isPlaying: false, isDirty: true }),
+  setGenerationMode: (generationMode) => set({ generationMode }),
+  setDirectionPrompt: (directionPrompt) => set({ directionPrompt: directionPrompt.slice(0, 800), ideaEdited: true }),
+  beginIdea: () => set((s) => ({ ideaStatus: 'loading', ideaEdited: false, directionPrompt: s.ideaEdited ? s.directionPrompt : '' })),
+  setIdea: (text, source) => set((s) => (s.ideaEdited ? { ideaStatus: source } : { directionPrompt: text.slice(0, 800), ideaStatus: source, ideaEdited: false })),
+  clearScene: () => set({ asset: null, plan: null, recreateScene: null, hasGenerated: false, currentTime: 0, isPlaying: false, generationMessage: '', generationError: '', undoStack: [], redoStack: [], isDirty: true }),
   setPlan: (plan, recordHistory = true) => {
     const state = get();
     const undoStack = recordHistory ? pushHistory(state.undoStack, snapshot(state)) : state.undoStack;
@@ -151,6 +180,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   newProject: () => set({
     asset: null,
     plan: null,
+    recreateScene: null,
+    hasGenerated: false,
     settings: cloneSettings(),
     currentTime: 0,
     isPlaying: false,

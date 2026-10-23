@@ -1,4 +1,7 @@
 import { SubjectMaskSchema, type EditorSettings, type MediaAsset, type MotionPlan, type SubjectMask } from '../types/motion';
+import { artworkFor } from './artwork';
+import { partsFor } from './parts';
+import { renderRecreate, type RecreateScene } from './recreate';
 import { evaluateScene } from './motionEngine';
 import { createDiffusedRepair, createMaskCanvases, createSubjectCutout, getMaskProvider, isReliableMask, maskAreaRatio, type MaskCanvases, type MaskProvider, type MaskProviderContext, type SegmentationResult } from './masks';
 
@@ -32,6 +35,8 @@ export interface RenderScene {
   settings: EditorSettings;
   runtime: RenderRuntime;
   showTransparencyGrid?: boolean;
+  /** When set, the Recreate engine draws the frame instead of the photo-warp pipeline. */
+  recreate?: RecreateScene | null;
 }
 
 function colorToRgb(color: string): [number, number, number] {
@@ -506,6 +511,12 @@ export function renderScene(scene: RenderScene, currentTime: number): void {
   if (!context) return;
   const width = canvas.width;
   const height = canvas.height;
+  if (scene.recreate) {
+    const needsParts = scene.recreate.elements.some((el) => el.kind === 'part');
+    const needsArtwork = scene.recreate.elements.some((el) => el.kind === 'artwork' || (el.kind === 'shine' && !needsParts));
+    renderRecreate({ ctx: context, width, height, scene: scene.recreate, time: currentTime, editorDuration: settings.duration, source: runtime.source, sourceWidth: runtime.source.width, sourceHeight: runtime.source.height, artwork: needsArtwork ? artworkFor(runtime.source) : null, parts: needsParts ? partsFor(runtime.source) : null });
+    return;
+  }
   const evaluated = evaluateScene(plan, settings, currentTime);
   const backgroundLayer = plan.layers.find((layer) => layer.kind === 'background');
   const cameraLayer = plan.layers.find((layer) => layer.kind === 'camera');

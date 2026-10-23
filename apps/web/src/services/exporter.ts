@@ -1,9 +1,11 @@
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
 import type { EditorSettings, MediaAsset, MotionPlan, VideoFormat } from '../types/motion';
+import type { RecreateScene } from '../engine/recreate';
 import { frameTime, totalFrames } from '../engine/motionEngine';
 import { createRenderRuntime, disposeRenderRuntime, renderScene } from '../engine/renderer';
 
 export interface ExportRequest {
+  recreate?: RecreateScene | null;
   asset: MediaAsset;
   plan: MotionPlan;
   settings: EditorSettings;
@@ -234,8 +236,8 @@ export async function exportMotionVideo(request: ExportRequest): Promise<ExportR
   exportCanvas.height = request.height;
   let runtime: Awaited<ReturnType<typeof createRenderRuntime>> | null = null;
   try {
-    runtime = await createRenderRuntime(request.asset, request.plan, settings, undefined, request.signal);
-    const scene = { canvas: exportCanvas, plan: request.plan, settings, runtime, showTransparencyGrid: false };
+    runtime = await createRenderRuntime(request.asset, request.plan, settings, request.recreate ? null : undefined, request.signal);
+    const scene = { canvas: exportCanvas, plan: request.plan, settings, runtime, showTransparencyGrid: false, recreate: request.recreate ?? null };
     throwIfAborted(request.signal);
     if (request.format === 'mp4') return await exportMp4(exportCanvas, scene, request, frames, startedAt);
     return await exportWebm(exportCanvas, scene, request, frames, startedAt);

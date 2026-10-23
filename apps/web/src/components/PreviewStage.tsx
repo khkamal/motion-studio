@@ -32,6 +32,8 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
     subjects: plan?.subjects.map((subject) => [subject.id, subject.region, subject.mask]) ?? [],
     movingRegions: plan?.subjectAnalysis.movingRegions ?? [],
   }), [plan?.layers, plan?.subjects, plan?.subjectAnalysis.movingRegions]);
+  const recreateScene = useEditorStore((state) => state.recreateScene);
+  const hasGenerated = useEditorStore((state) => state.hasGenerated);
   const dimensions = previewResolution(settings.width, settings.height);
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
       return () => controller.abort();
     }
     const prepareTimer = window.setTimeout(() => {
-      createRenderRuntime(asset, plan, settings, undefined, controller.signal).then((runtime) => {
+      createRenderRuntime(asset, plan, settings, useEditorStore.getState().recreateScene || !useEditorStore.getState().hasGenerated ? null : undefined, controller.signal).then((runtime) => {
         if (cancelled) {
           disposeRenderRuntime(runtime);
           return;
@@ -72,7 +74,7 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
       window.clearTimeout(prepareTimer);
     };
     // Masks and chroma-key parameters affect the prepared source buffers; ordinary motion edits do not.
-  }, [asset?.id, maskSignature, settings.greenScreen.enabled, settings.greenScreen.color, settings.greenScreen.customColor, settings.greenScreen.tolerance, settings.greenScreen.softness]);
+  }, [asset?.id, hasGenerated, maskSignature, settings.greenScreen.enabled, settings.greenScreen.color, settings.greenScreen.customColor, settings.greenScreen.tolerance, settings.greenScreen.softness]);
 
   useEffect(() => () => {
     if (runtimeRef.current) disposeRenderRuntime(runtimeRef.current);
@@ -94,7 +96,7 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
       const liveSettings = state.settings;
       if (lastTimestamp !== null) playhead = Math.min(liveSettings.duration, playhead + Math.max(0, timestamp - lastTimestamp) / 1000);
       lastTimestamp = timestamp;
-      renderScene({ canvas, plan: livePlan, settings: liveSettings, runtime: runtimeRef.current, showTransparencyGrid: true }, playhead);
+      renderScene({ canvas, plan: livePlan, settings: liveSettings, runtime: runtimeRef.current, showTransparencyGrid: true, recreate: state.recreateScene }, playhead);
       if (timestamp - lastPublish >= 90) {
         useEditorStore.getState().setCurrentTime(playhead);
         lastPublish = timestamp;
@@ -115,8 +117,8 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
 
   useEffect(() => {
     if (isPlaying || !asset || !plan || !runtimeReady || !canvasRef.current || !runtimeRef.current) return;
-    renderScene({ canvas: canvasRef.current, plan, settings, runtime: runtimeRef.current, showTransparencyGrid: true }, currentTime);
-  }, [asset?.id, plan, runtimeReady, isPlaying, settings, currentTime]);
+    renderScene({ canvas: canvasRef.current, plan, settings, runtime: runtimeRef.current, showTransparencyGrid: true, recreate: recreateScene }, currentTime);
+  }, [asset?.id, plan, runtimeReady, isPlaying, settings, currentTime, recreateScene]);
 
   const updateDuration = (value: string) => {
     if (value === 'custom') {
@@ -190,7 +192,7 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
         <div className="canvas-surface" style={{ aspectRatio: `${settings.width} / ${settings.height}` }}>
           <canvas ref={canvasRef} aria-label={`Motion preview for ${mainSubject}`} />
           {!asset && <div className="canvas-empty-state"><div className="canvas-empty-orbit"><Icon name="image" size={24} /></div><h2>Bring a still to life.</h2><p>Upload an image to create an editable image-to-motion scene.</p><button className="button-primary" onClick={onUpload}><Icon name="upload" size={15} /> Choose an image</button><span>or drop an image anywhere · Ctrl+V to paste</span></div>}
-          {asset && (!plan || !runtimeReady) && <div className="canvas-loading-overlay"><div className="loading-spinner" />{runtimeError || 'Preparing preview and optional local subject mask…'}</div>}
+          {asset && (!plan || !runtimeReady) && <div className="canvas-loading-overlay"><div className="loading-spinner" />{runtimeError || (hasGenerated ? 'Preparing preview and optional local subject mask…' : 'Preparing preview…')}</div>}
           {asset && settings.greenScreen.enabled && <div className="key-preview-chip"><span /> Chroma key preview</div>}
         </div>
       </div>
