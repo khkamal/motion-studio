@@ -46,6 +46,14 @@ describe('generated animation contract v1', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(){api.rect(root,10,10,20,20,{})},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
   });
+  it('clips the SVG root and clamps rectangle and circle geometry to its viewport', () => {
+    const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{}),rect=api.rect(root,780,440,100,60,{fill:'#fff'}),circle=api.circle(root,790,440,50,{fill:'#00d4ff'});return {duration:8,render(t){api.animate(rect,'x',5000,5000,0,0);api.animate(rect,'y',5000,5000,0,0);return root.render(t)},destroy(){}}}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'ready'});
+    const svg=sandbox.messages[0].svg as string;
+    expect(svg).toContain('overflow="hidden"');
+    expect(svg).toContain('<rect x="780" y="440" width="20" height="10"');
+    expect(svg).toContain('<circle cx="790" cy="440" r="10"');
+  });
   it('recycles primitives created during render so they do not pile up across sampled frames', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(t){api.circle(root,400+t,225,12,{fill:'#00d4ff'});return root.render(t)},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
