@@ -79,3 +79,13 @@ Autosave uses IndexedDB when available. `.motion` project files include the imag
 - MP4 depends on browser WebCodecs/H.264 support. WebM depends on MediaRecorder and a supported VP8/VP9 codec. MOV is unsupported.
 - Canvas render resolution is bounded for preview and source processing to reduce memory pressure; 4K export is frame-by-frame and may be slow or unsupported on low-end devices.
 - Audio tracks, cloud sync, and server-side accounts are not part of this browser editor.
+
+## Code-driven animation generation
+
+The **Create with animation code** action opens the separate code studio. Describe the motion and optionally use the currently loaded PNG/JPEG/WebP as visual guidance. Generation calls `POST /api/generate`; this repository provides a Vercel serverless function at `api/generate.ts`. Set `GEMINI_API_KEY` as a server-side environment variable (never `VITE_GEMINI_API_KEY`) and optionally set `GEMINI_MODEL` (default `gemini-2.5-flash`). The function makes a non-streaming Gemini `generateContent` request, with a 60-second timeout. Missing configuration returns HTTP 503; there is no production mock/fallback.
+
+For local development, use a Vercel-compatible runtime such as `vercel dev` so `/api/generate` is routed to the serverless function; plain `npm run dev` serves only the Vite frontend and code generation will report the unavailable endpoint. The frontend preview remains usable with the built-in starter code. Add the same environment variables in the deployment provider's server-side project settings. Do not put provider credentials in browser configuration or commit a populated `.env` file.
+
+Generated animation contract v1 is documented in `apps/web/src/services/codeRuntime.ts`: JavaScript `export default function createAnimation(api)`, returning `{ duration, render(time), destroy() }`; the supplied API creates SVG roots, rectangles/text, and deterministic time-based opacity/position/scale/rotation animations. Run preview explicitly after editing. It executes in an opaque-origin iframe with `sandbox="allow-scripts"`, CSP blocking connections, forms and external resources, and no same-origin/storage permission. The iframe necessarily enables inline script and dynamic function construction to run generated JavaScript. This is defense-in-depth, not a perfect browser security boundary; do not treat arbitrary hostile code as harmless.
+
+This code-driven preview currently does not map arbitrary source into the legacy structured timeline, persist code in `.motion` projects, or use the legacy exporter. Existing raster/image-motion workflows, project format, timeline and export are retained unchanged; use those established controls for their supported workflows.
