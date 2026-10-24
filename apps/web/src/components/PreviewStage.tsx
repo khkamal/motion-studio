@@ -5,6 +5,7 @@ import { formatTime } from '../engine/motionEngine';
 import { normalizePlan } from '../engine/planBuilder';
 import { useEditorStore } from '../store/editorStore';
 import { Icon } from './Icon';
+import { fitPreviewToBounds, type PreviewSize } from '../utils/previewLayout';
 
 const DURATION_CHOICES = [5, 6, 7, 8, 9, 10, 12, 15, 20, 30];
 const FPS_CHOICES = [24, 25, 30, 50, 60] as const;
@@ -17,7 +18,9 @@ function previewResolution(width: number, height: number) {
 
 export function PreviewStage({ onUpload }: { onUpload: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewAreaRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<RenderRuntime | null>(null);
+  const [previewSize, setPreviewSize] = useState<PreviewSize>({ width: 0, height: 0 });
   const asset = useEditorStore((state) => state.asset);
   const plan = useEditorStore((state) => state.plan);
   const settings = useEditorStore((state) => state.settings);
@@ -35,6 +38,26 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
   const recreateScene = useEditorStore((state) => state.recreateScene);
   const hasGenerated = useEditorStore((state) => state.hasGenerated);
   const dimensions = previewResolution(settings.width, settings.height);
+
+  useEffect(() => {
+    const area = previewAreaRef.current;
+    if (!area) return;
+    const measure = () => {
+      const style = window.getComputedStyle(area);
+      const availableWidth = area.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+      const availableHeight = area.clientHeight - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom);
+      const nextSize = fitPreviewToBounds(availableWidth, availableHeight, settings.width, settings.height);
+      setPreviewSize((current) => current.width === nextSize.width && current.height === nextSize.height ? current : nextSize);
+    };
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    observer?.observe(area);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [settings.width, settings.height]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -188,8 +211,8 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
         </div>
       </div>
 
-      <div className={`preview-canvas-area ${asset ? '' : 'preview-empty-area'}`}>
-        <div className="canvas-surface" style={{ aspectRatio: `${settings.width} / ${settings.height}` }}>
+      <div ref={previewAreaRef} className={`preview-canvas-area ${asset ? '' : 'preview-empty-area'}`}>
+        <div className="canvas-surface" style={{ width: previewSize.width ? `${previewSize.width}px` : undefined, height: previewSize.height ? `${previewSize.height}px` : undefined, aspectRatio: `${settings.width} / ${settings.height}` }}>
           <canvas ref={canvasRef} aria-label={`Motion preview for ${mainSubject}`} />
           {!asset && <div className="canvas-empty-state"><div className="canvas-empty-orbit"><Icon name="image" size={24} /></div><h2>Bring a still to life.</h2><p>Upload an image to create an editable image-to-motion scene.</p><button className="button-primary" onClick={onUpload}><Icon name="upload" size={15} /> Choose an image</button><span>or drop an image anywhere · Ctrl+V to paste</span></div>}
           {asset && (!plan || !runtimeReady) && <div className="canvas-loading-overlay"><div className="loading-spinner" />{runtimeError || (hasGenerated ? 'Preparing preview and optional local subject mask…' : 'Preparing preview…')}</div>}
