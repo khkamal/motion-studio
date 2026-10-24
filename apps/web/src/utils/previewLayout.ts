@@ -3,18 +3,29 @@ export interface PreviewSize {
   height: number;
 }
 
-/** Fit a fixed-aspect-ratio composition inside the preview's available CSS-pixel box. */
+/** Uniformly scale a fixed composition to fit the available CSS-pixel box. */
+export function fitPreviewScale(
+  availableWidth: number,
+  availableHeight: number,
+  compositionWidth: number,
+  compositionHeight: number,
+): number {
+  if (![availableWidth, availableHeight, compositionWidth, compositionHeight].every(Number.isFinite)
+    || availableWidth <= 0 || availableHeight <= 0 || compositionWidth <= 0 || compositionHeight <= 0) {
+    return 0;
+  }
+  return Math.min(availableWidth / compositionWidth, availableHeight / compositionHeight);
+}
+
+/** Return rounded display dimensions for the same fixed-aspect-ratio fit. */
 export function fitPreviewToBounds(
   availableWidth: number,
   availableHeight: number,
   compositionWidth: number,
   compositionHeight: number,
 ): PreviewSize {
-  if (![availableWidth, availableHeight, compositionWidth, compositionHeight].every(Number.isFinite)
-    || availableWidth <= 0 || availableHeight <= 0 || compositionWidth <= 0 || compositionHeight <= 0) {
-    return { width: 0, height: 0 };
-  }
-  const scale = Math.min(availableWidth / compositionWidth, availableHeight / compositionHeight);
+  const scale = fitPreviewScale(availableWidth, availableHeight, compositionWidth, compositionHeight);
+  if (scale <= 0) return { width: 0, height: 0 };
   return {
     width: Math.max(1, Math.floor(compositionWidth * scale)),
     height: Math.max(1, Math.floor(compositionHeight * scale)),
