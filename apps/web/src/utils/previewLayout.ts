@@ -14,7 +14,13 @@ export function fitPreviewScale(
     || availableWidth <= 0 || availableHeight <= 0 || compositionWidth <= 0 || compositionHeight <= 0) {
     return 0;
   }
-  return Math.min(availableWidth / compositionWidth, availableHeight / compositionHeight);
+  return Math.min(1, availableWidth / compositionWidth, availableHeight / compositionHeight);
+}
+
+/** Apply a bounded user zoom to the auto-fit scale without changing composition/export dimensions. */
+export function scalePreviewZoom(fitScale: number, zoomFactor: number): number {
+  if (!Number.isFinite(fitScale) || !Number.isFinite(zoomFactor) || fitScale <= 0) return 0;
+  return fitScale * Math.min(2, Math.max(0.5, zoomFactor));
 }
 
 /** Return rounded display dimensions for the same fixed-aspect-ratio fit. */
