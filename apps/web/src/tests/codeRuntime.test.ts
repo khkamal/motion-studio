@@ -33,6 +33,7 @@ describe('generated animation contract v1', () => {
   it('accepts an SVG root wrapper returned directly instead of serialized markup', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(){return root},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
+    expect(sandbox.messages[0].svg).toContain('preserveAspectRatio="xMidYMid meet"');
   });
   it('falls back to the active SVG root when render mutates it but returns nothing', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(){api.rect(root,10,10,20,20,{})},destroy(){}}}`);
