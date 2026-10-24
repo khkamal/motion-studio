@@ -73,7 +73,7 @@ function MotionPanel({ isGenerating, apiConfigured, onGenerate, onLegacyGenerate
       {!isGenerating && <span className="generate-arrow"><Icon name="arrow" size={14} /></span>}
     </button>
     <div className="prompt-examples">Image-based legacy workflow: <button onClick={onLegacyGenerate} disabled={isGenerating || !useEditorStore.getState().asset}>Use structured motion plan</button></div>
-    <div className="inline-ai-notice"><span className="status-dot" /><span>AI code generation uses the server API configuration. The Generate panel reports if it is unavailable.</span></div>
+    <div className="inline-ai-notice"><span className="status-dot" /><span>AI code generation uses enabled Gemini keys from API settings via the backend. Missing-key or provider errors appear in the preview.</span></div>
 
     {plan && generationMode === 'animate' && <>
       <div className="motion-concept-card">

@@ -81,7 +81,7 @@ export function ApiKeysModal({ open, onClose, onPersist }: ApiKeysModalProps) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="modal-card api-keys-modal" role="dialog" aria-modal="true" aria-labelledby="api-modal-title">
       <div className="modal-header"><div><span className="panel-eyebrow">AI CONFIGURATION</span><h2 id="api-modal-title">Gemini API keys</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><Icon name="close" /></button></div>
-      <div className="security-note"><Icon name="lock" size={15} /><p>Keys are stored only in this browser's local storage and sent directly to Google in an HTTPS request. They are never sent to a Motion Studio server or included in project/preset files. Anyone with access to this browser profile can view its local storage.</p></div>
+      <div className="security-note"><Icon name="lock" size={15} /><p>Keys are stored in this browser's local storage and are never included in project/preset files. Existing structured motion requests go directly to Google. Code-generation requests send enabled keys to this app's API over HTTPS so its Gemini backend can generate code and rotate after quota errors; the API does not log key values. Anyone with access to this browser profile can view its local storage.</p></div>
       <div className="key-list-header"><span>CONFIGURATIONS</span><strong>{enabledCount} Active</strong></div>
       <div className="key-config-list">
         {configs.length === 0 && <div className="empty-key-state"><Icon name="key" size={18} /><span>No Gemini keys added yet.</span></div>}
@@ -99,7 +99,7 @@ export function ApiKeysModal({ open, onClose, onPersist }: ApiKeysModalProps) {
       </div>
       <details className="import-keys-details"><summary>Import multiple configurations <Icon name="chevron" size={13} /></summary><p>Paste a JSON array of objects with <code>label</code>, <code>key</code>, and optional <code>model</code> fields. The file is processed locally.</p><textarea className="manual-prompt-input import-keys-input" value={importText} onChange={(event) => setImportText(event.target.value)} placeholder={'[{"label":"Studio key","key":"…","model":"gemini-3.1-flash-lite"}]'} /><button className="button-secondary full-width" disabled={!importText.trim()} onClick={importConfigs}>Import configurations</button></details>
       {notice && <div className="modal-notice">{notice}</div>}
-      <div className="modal-footer"><span>One selected configuration is used per request. No automatic quota-circumvention rotation.</span><button className="button-secondary" onClick={onClose}>Done</button></div>
+      <div className="modal-footer"><span>Structured motion uses the selected key. Code generation tries enabled keys in order only after quota or rate-limit errors.</span><button className="button-secondary" onClick={onClose}>Done</button></div>
     </section>
   </div>;
 }

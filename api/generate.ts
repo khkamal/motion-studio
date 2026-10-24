@@ -4,13 +4,13 @@ type VercelResponse = { status(code:number):VercelResponse; json(value:unknown):
 const SYSTEM = `You are a motion-graphics creative coder. Return executable JavaScript only, no markdown. Contract v1: export default function createAnimation(api) { ... return {duration: seconds, render(time){ return SVG string; }, destroy(){}} }. API: api.svg(width,height,{background,transparent}) returns a root; api.rect(root,x,y,w,h,{rx,fill,opacity}) and api.text(root,value,x,y,{fill,size,anchor}) create SVG nodes; api.animate(node,property,from,to,start,duration,easing) supports opacity, rotation, x, y, scale; easing is linear or easeOut. root.render(time) evaluates deterministic time. Use only supplied API; no network, DOM globals, imports, timers, or external resources. Build an original multi-element SVG animation from the user's prompt/reference. Duration <=120 seconds, viewport <=1920. The code executes in a restricted iframe.`;
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const configuredKeys=(()=>{const many=process.env.GEMINI_API_KEYS?.trim();if(many){try{const parsed=JSON.parse(many);if(Array.isArray(parsed))return parsed.filter((x):x is string=>typeof x==='string'&&Boolean(x.trim())).map(x=>x.trim());}catch{/* support comma/newline-separated secret values too */}return many.split(/[\n,]/).map(x=>x.trim()).filter(Boolean);}return process.env.GEMINI_API_KEY?[process.env.GEMINI_API_KEY]:[]})();
-  if (!configuredKeys.length) return res.status(503).json({ error: 'Code generation is not configured. Set GEMINI_API_KEY or GEMINI_API_KEYS as a server-side secret.' });
+  let requestKeys:string[]=[];
   let prompt: string; let image: { mimeType: string; data: string } | undefined; let composition: { durationSeconds:number; fps:number; width:number; height:number; totalFrames:number; aspectRatio:string; frameConvention:string; looping:boolean; startEndStates:string } | undefined;
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     if (!body || typeof body.prompt !== 'string' || body.prompt.trim().length > 4000) return res.status(400).json({ error: 'Prompt must be text of at most 4000 characters.' });
     prompt = body.prompt.trim() || 'Create an elegant, original animated graphic based on the reference image.';
+    if(body.providerKeys!==undefined){if(!Array.isArray(body.providerKeys)||body.providerKeys.length>10||body.providerKeys.some((key:unknown)=>typeof key!=='string'||key.length<8||key.length>256))return res.status(400).json({error:'Selected Gemini key list is invalid.'});requestKeys=body.providerKeys.map((key:string)=>key.trim()).filter(Boolean);}
     if(body.composition){const c=body.composition;if(!Number.isFinite(c.durationSeconds)||c.durationSeconds<1||c.durationSeconds>120||![24,25,30,50,60].includes(c.fps)||!Number.isInteger(c.width)||!Number.isInteger(c.height)||c.width<16||c.height<16||c.width>7680||c.height>7680)return res.status(400).json({error:'Invalid composition settings.'});composition=c;}
     if (body.image !== undefined) {
       const i=body.image;
@@ -18,6 +18,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       image=i;
     }
   } catch { return res.status(400).json({error:'Invalid JSON request.'}); }
+  const configuredKeys=(()=>{const many=process.env.GEMINI_API_KEYS?.trim();if(many){try{const parsed=JSON.parse(many);if(Array.isArray(parsed))return parsed.filter((x):x is string=>typeof x==='string'&&Boolean(x.trim())).map(x=>x.trim());}catch{/* support comma/newline-separated secret values too */}return many.split(/[\n,]/).map(x=>x.trim()).filter(Boolean);}return process.env.GEMINI_API_KEY?[process.env.GEMINI_API_KEY]:[]})();
+  const eligibleKeys=[...new Set([...requestKeys,...configuredKeys])].slice(0,10);
+  if(!eligibleKeys.length)return res.status(503).json({error:'No Gemini API key is available. Add or select a key in Gemini API settings, or configure a server-side key.'});
   const controller = new AbortController(); const timer=setTimeout(()=>controller.abort(),60_000);
   try {
     const model=(process.env.GEMINI_MODEL||'gemini-2.5-flash').replace(/^models\//,'');
@@ -26,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const parts: unknown[]=[{text:`${SYSTEM}${context}\n\nUser request:\n${prompt}`}];
     if(image) parts.push({inline_data:{mime_type:image.mimeType,data:image.data}});
     let data:{candidates?:Array<{content?:{parts?:Array<{text?:string}>}}>}; let response:Response|undefined; let quotaKeysTried=0;
-    for(const key of configuredKeys.slice(0,10)){
+    for(const key of eligibleKeys){
       response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},body:JSON.stringify({contents:[{role:'user',parts}],generationConfig:{temperature:0.7,maxOutputTokens:8192}}),signal:controller.signal});
       data=await response.json() as typeof data;
       if(response.ok)break;
