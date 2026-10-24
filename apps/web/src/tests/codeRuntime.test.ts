@@ -46,6 +46,13 @@ describe('generated animation contract v1', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(){api.rect(root,10,10,20,20,{})},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
   });
+  it('re-renders the current code-animation frame after an iframe viewport resize', () => {
+    const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{}),orb=api.circle(root,400,225,20,{});return {duration:8,render(){return root.render(0)},destroy(){}}}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'ready'});
+    sandbox.messages.length=0;
+    sandbox.resize();
+    expect(sandbox.messages[0]).toMatchObject({type:'tick',frameIndex:0});
+  });
   it('clips the SVG root and clamps rectangle and circle geometry to its viewport', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{}),rect=api.rect(root,780,440,100,60,{fill:'#fff'}),circle=api.circle(root,790,440,50,{fill:'#00d4ff'});return {duration:8,render(t){api.animate(rect,'x',5000,5000,0,0);api.animate(rect,'y',5000,5000,0,0);return root.render(t)},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'ready'});
@@ -79,12 +86,12 @@ interface MessageLike { data: Record<string, unknown> }
 interface FakeElement { tag:string; attrs:Map<string,string>; children:FakeElement[]; parent?:FakeElement; style:Record<string,string>; setAttribute(key:string,value:string):void; getAttribute(key:string):string|null; append(child:FakeElement):void; remove():void; getBBox():{x:number;y:number;width:number;height:number}; readonly outerHTML:string }
 function makeElement(tag:string):FakeElement {const attrs=new Map<string,string>();const children:FakeElement[]=[];return {tag,attrs,children,style:{},setAttribute(key,value){attrs.set(key,String(value))},getAttribute(key){return attrs.get(key)||null},append(child){children.push(child);child.parent=this},remove(){if(this.parent){const index=this.parent.children.indexOf(this as unknown as FakeElement);if(index>=0)this.parent.children.splice(index,1)}},getBBox(){if(tag==='rect'){const x=Number(attrs.get('x')||0),y=Number(attrs.get('y')||0);return {x,y,width:Number(attrs.get('width')||0),height:Number(attrs.get('height')||0)}}if(tag==='circle'){const cx=Number(attrs.get('cx')||0),cy=Number(attrs.get('cy')||0),r=Number(attrs.get('r')||0);return {x:cx-r,y:cy-r,width:2*r,height:2*r}}if(tag==='path'){const pairs=[...String(attrs.get('d')||'').matchAll(/[ML]\s*(-?[\d.]+)\s+(-?[\d.]+)/gi)].map(match=>[Number(match[1]),Number(match[2])]);if(!pairs.length)return {x:0,y:0,width:0,height:0};const xs=pairs.map(pair=>pair[0]),ys=pairs.map(pair=>pair[1]),left=Math.min(...xs),top=Math.min(...ys);return {x:left,y:top,width:Math.max(...xs)-left,height:Math.max(...ys)-top}}if(tag==='g'||tag==='svg'){const boxes=children.map(child=>child.getBBox()).filter(box=>box.width>0&&box.height>0);if(!boxes.length)return {x:0,y:0,width:0,height:0};const left=Math.min(...boxes.map(box=>box.x)),top=Math.min(...boxes.map(box=>box.y)),right=Math.max(...boxes.map(box=>box.x+box.width)),bottom=Math.max(...boxes.map(box=>box.y+box.height));return {x:left,y:top,width:right-left,height:bottom-top}}return {x:0,y:0,width:0,height:0}},get outerHTML(){const a=[...attrs].map(([k,v])=>`${k}="${v}"`).join(' ');return `<${tag} ${a}>${children.map(child=>child.outerHTML).join('')}</${tag}>`}};}
 function runSandbox(code:string){
- const messages:Array<Record<string,unknown>>=[];let handler:((event:MessageLike)=>void)|undefined;
- const fakeWindow={addEventListener(_type:string,fn:(event:MessageLike)=>void){handler=fn}};
+ const messages:Array<Record<string,unknown>>=[];let handler:((event:MessageLike)=>void)|undefined;const windowHandlers=new Map<string,Array<(event:MessageLike)=>void>>();
+ const fakeWindow={addEventListener(type:string,fn:(event:MessageLike)=>void){const handlers=windowHandlers.get(type)||[];handlers.push(fn);windowHandlers.set(type,handlers);if(type==='message')handler=fn}};
  const fakeDocument={createElementNS(_ns:string,tag:string){return makeElement(tag)},body:{replaceChildren(..._elements:FakeElement[]){}}};
  const html=createRuntimeDocument();const script=html.slice(html.indexOf('<script>')+8,html.lastIndexOf('</script>'));expect(script.length).toBeGreaterThan(0);
  new Function('window','parent','document','performance','setInterval','clearInterval',script)(fakeWindow,{postMessage(message:Record<string,unknown>){messages.push(message)}},fakeDocument,{now:()=>0},()=>1,()=>{});
  if(!handler)throw new Error('Sandbox did not register its message handler.');
  handler({data:{channel:'motion-code-v1',type:'run',code,duration:8,fps:30,looping:true}});
- return {messages,send:handler};
+ return {messages,send:handler,resize(){for(const listener of windowHandlers.get('resize')||[])listener({data:{}})}};
 }
