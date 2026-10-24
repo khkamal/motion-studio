@@ -422,6 +422,7 @@ export function App() {
   const updateSettings = (patch: EditorSettingsPatch) => useEditorStore.getState().updateSettings(patch);
   const activeConfig = apiKeys.find((config) => config.id === activeApiId && config.enabled);
   const codeGenerationKeys = [activeConfig, ...apiKeys.filter((config) => config.enabled && config.id !== activeConfig?.id)].filter((config) => config != null).map((config) => config.key);
+  const codeGenerationModel = activeConfig?.model;
 
   return <div className={`motion-studio-app ${dragging ? 'is-dropping' : ''}`} onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false); }} onDrop={onDrop}>
     <TopBar
@@ -441,7 +442,7 @@ export function App() {
     />
     <main className="studio-grid">
       <SourcePanel asset={asset} settings={settings} subjectType={selectedSubjectType} onPick={handlePickImage} onRemove={handleRemoveImage} onTypeChange={(type) => useEditorStore.getState().setSelectedSubjectType(type)} onSettingsChange={updateSettings} />
-      <div className="workspace-and-timeline">{showCodeStudio ? <CodeStudio open onClose={() => setShowCodeStudio(false)} image={asset?.blob ?? null} apiKeys={codeGenerationKeys} prompt={directionPrompt} duration={settings.duration} fps={settings.fps} width={settings.width} height={settings.height} looping={codeLooping} /> : <PreviewStage onUpload={handlePickImage} />}<Timeline /></div>
+      <div className="workspace-and-timeline">{showCodeStudio ? <CodeStudio open onClose={() => setShowCodeStudio(false)} image={asset?.blob ?? null} apiKeys={codeGenerationKeys} model={codeGenerationModel} prompt={directionPrompt} duration={settings.duration} fps={settings.fps} width={settings.width} height={settings.height} looping={codeLooping} /> : <PreviewStage onUpload={handlePickImage} />}<Timeline /></div>
       <div><Inspector isGenerating={isGenerating} apiConfigured={Boolean(activeConfig)} onGenerate={() => setShowCodeStudio(true)} onLegacyGenerate={handleGenerate} looping={codeLooping} onLoopingChange={setCodeLooping} onNewIdea={() => void requestIdea(useEditorStore.getState().directionPrompt)} onManualPrompt={handleManualPrompt} onOpenKeys={() => setShowKeyModal(true)} /></div>
     </main>
     <input ref={imageInputRef} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" onChange={(event) => { const files = event.target.files ? Array.from(event.target.files) : []; if (files.length) void handleImageFiles(files); event.currentTarget.value = ''; }} />
