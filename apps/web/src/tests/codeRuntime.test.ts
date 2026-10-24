@@ -6,9 +6,10 @@ describe('generated animation contract v1', () => {
     expect(CODE_RUNTIME_VERSION).toBe(1);
     expect(validateAnimationCode(STARTER_ANIMATION)).toBeNull();
   });
-  it('rejects empty/oversized source and incomplete factories before execution', () => {
+  it('rejects empty/oversized source and incomplete factories before execution, while accepting Canvas renderFrame', () => {
     expect(validateAnimationCode('')).toMatch(/empty/);
-    expect(validateAnimationCode('export default function createAnimation(api) { return {}; }')).toMatch(/render/);
+    expect(validateAnimationCode('export default function createAnimation(api) { return {}; }')).toMatch(/contract v1/);
+    expect(validateAnimationCode('function renderFrame(time, frame, fps, ctx, width, height) { ctx.fillRect(0, 0, width, height); }')).toBeNull();
     expect(validateAnimationCode('x'.repeat(80_001))).toMatch(/80 KB/);
   });
   it('runs render-time zero-duration setters and matches sampled loop endpoints', () => {
@@ -53,13 +54,22 @@ describe('generated animation contract v1', () => {
     sandbox.resize();
     expect(sandbox.messages[0]).toMatchObject({type:'tick',frameIndex:0});
   });
+  it('keeps a circle radius visible when its initial position is the origin before animation moves it', () => {
+    const sandbox=runSandbox(`export default function createAnimation(api){const width=1920,height=1080,duration=8,root=api.svg(width,height,{background:'#0f172a',transparent:false}),track=api.path(root,'M 500,540 L 1420,540 Z',{fill:'none',stroke:'#38bdf8',strokeWidth:15}),ball=api.circle(root,0,0,25,{fill:'#f8fafc',stroke:'#ffffff',strokeWidth:5}),glow=api.circle(root,0,0,40,{fill:'#38bdf8',opacity:.3}),centerX=width/2,centerY=height/2,scale=324;return {duration,render(time){const t=time/duration*Math.PI*2,denominator=1+Math.sin(t)**2,x=centerX+scale*Math.cos(t)/denominator,y=centerY+scale*Math.sin(t)*Math.cos(t)/denominator;api.animate(ball,'cx',x,x,0,0);api.animate(ball,'cy',y,y,0,0);api.animate(glow,'cx',x,x,0,0);api.animate(glow,'cy',y,y,0,0);return root},destroy(){}}}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'ready'});
+    const svg=sandbox.messages[0].svg as string;
+    expect(svg).toContain('<path');
+    expect(svg).toContain('r="25"');
+    expect(svg).toContain('r="40"');
+    expect(svg).toContain('cx="1284"');
+  });
   it('clips the SVG root and clamps rectangle and circle geometry to its viewport', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{}),rect=api.rect(root,780,440,100,60,{fill:'#fff'}),circle=api.circle(root,790,440,50,{fill:'#00d4ff'});return {duration:8,render(t){api.animate(rect,'x',5000,5000,0,0);api.animate(rect,'y',5000,5000,0,0);return root.render(t)},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'ready'});
     const svg=sandbox.messages[0].svg as string;
     expect(svg).toContain('overflow="hidden"');
     expect(svg).toContain('<rect x="780" y="440" width="20" height="10"');
-    expect(svg).toContain('<circle cx="790" cy="440" r="10"');
+    expect(svg).toContain('<circle cx="750" cy="400" r="50"');
   });
   it('recycles primitives created during render so they do not pile up across sampled frames', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(t){api.circle(root,400+t,225,12,{fill:'#00d4ff'});return root.render(t)},destroy(){}}}`);
@@ -80,6 +90,16 @@ describe('generated animation contract v1', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{}),node=api.rect(root,0,0,10,10,{});return {duration:8,render(t){api.animate(node,'x',0,1,0,-1,'linear');return root.render(t)}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'error'});
   });
+  it('runs the Canvas renderFrame contract with composition timing, helpers, and export dimensions', () => {
+    const sandbox=runSandbox(`function renderFrame(time,frame,fps,ctx,width,height){const value=fbm(.1,.2,4);if(Math.abs(motion.loopProgress-time/8)>1e-9||!Number.isFinite(value)||TAU<6||smoothstep(0,1,.5)!==.5)throw Error('Canvas helpers are unavailable');ctx.fillRect(0,0,width,height);}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
+    expect(sandbox.messages[0].svg).toBeUndefined();
+    sandbox.messages.length=0;
+    sandbox.send({data:{channel:'motion-code-v1',type:'frame',time:2,width:640,height:360}});
+    expect(sandbox.messages[0]).toMatchObject({type:'frame',time:2});
+    expect(sandbox.messages[0].svg).toContain('width="640" height="360"');
+    expect(sandbox.messages[0].svg).toContain('data:image/png;base64,ZmFrZQ==');
+  });
 });
 
 interface MessageLike { data: Record<string, unknown> }
@@ -88,7 +108,8 @@ function makeElement(tag:string):FakeElement {const attrs=new Map<string,string>
 function runSandbox(code:string){
  const messages:Array<Record<string,unknown>>=[];let handler:((event:MessageLike)=>void)|undefined;const windowHandlers=new Map<string,Array<(event:MessageLike)=>void>>();
  const fakeWindow={addEventListener(type:string,fn:(event:MessageLike)=>void){const handlers=windowHandlers.get(type)||[];handlers.push(fn);windowHandlers.set(type,handlers);if(type==='message')handler=fn}};
- const fakeDocument={createElementNS(_ns:string,tag:string){return makeElement(tag)},body:{replaceChildren(..._elements:FakeElement[]){}}};
+ const fakeCanvas=()=>{const context={fillStyle:'',setTransform(){},clearRect(){},save(){},restore(){},fillRect(){}};return {width:300,height:150,style:{},getContext(){return context},toDataURL(){return 'data:image/png;base64,ZmFrZQ=='},remove(){}}};
+ const fakeDocument={createElementNS(_ns:string,tag:string){return makeElement(tag)},createElement(tag:string){if(tag==='canvas')return fakeCanvas();return makeElement(tag)},body:{replaceChildren(..._elements:FakeElement[]){}}};
  const html=createRuntimeDocument();const script=html.slice(html.indexOf('<script>')+8,html.lastIndexOf('</script>'));expect(script.length).toBeGreaterThan(0);
  new Function('window','parent','document','performance','setInterval','clearInterval',script)(fakeWindow,{postMessage(message:Record<string,unknown>){messages.push(message)}},fakeDocument,{now:()=>0},()=>1,()=>{});
  if(!handler)throw new Error('Sandbox did not register its message handler.');
