@@ -35,8 +35,11 @@ describe('responsive preview sizing', () => {
     expect(scalePreviewZoom(0, 1)).toBe(0);
   });
 
-  it('does not enlarge a composition beyond its native CSS size when there is extra room', () => {
-    expect(fitPreviewScale(4000, 2400, 1920, 1080)).toBe(1);
+  it('fits the fixed logical code composition into larger and smaller viewports without changing its ratio', () => {
+    expect(fitPreviewScale(1200, 900, 533, 299)).toBeCloseTo(1200 / 533);
+    expect(fitPreviewScale(320, 180, 533, 299)).toBeCloseTo(Math.min(320 / 533, 180 / 299));
+    expect(fitPreviewScale(320, 180, 533, 299) * 533).toBeCloseTo(320);
+    expect(fitPreviewScale(320, 180, 533, 299) * 299).toBeLessThanOrEqual(180);
   });
 
   it('returns an empty size until the preview has measurable bounds', () => {
