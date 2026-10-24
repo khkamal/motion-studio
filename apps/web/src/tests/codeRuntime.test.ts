@@ -34,10 +34,22 @@ describe('generated animation contract v1', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(){return root},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
     expect(sandbox.messages[0].svg).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(sandbox.messages[0].svg).toContain('xmlns="http://www.w3.org/2000/svg"');
+  });
+  it('reframes off-center artwork inside the composition without changing the SVG output dimensions', () => {
+    const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{}),line=api.path(root,'M 700 380 L 790 440',{stroke:'#00d4ff',strokeWidth:12});return {duration:8,render(){return root.render(0)},destroy(){}}}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
+    expect(sandbox.messages[0].svg).toContain('viewBox="0 0 800 450"');
+    expect(sandbox.messages[0].svg).toContain('transform="translate(');
   });
   it('falls back to the active SVG root when render mutates it but returns nothing', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(){api.rect(root,10,10,20,20,{})},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
+  });
+  it('recycles primitives created during render so they do not pile up across sampled frames', () => {
+    const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(t){api.circle(root,400+t,225,12,{fill:'#00d4ff'});return root.render(t)},destroy(){}}}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
+    expect((sandbox.messages[0].svg as string).match(/<circle/g)).toHaveLength(1);
   });
   it('supports a real SVG path and circle primitive in the generated scene', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{}),curve=api.path(root,'M 0 0 L 10 10 Z',{fill:'none',stroke:'#00d4ff',strokeWidth:3}),orb=api.circle(root,20,20,8,{fill:'#fff'});return {duration:8,render(t){const d='M 0 0 L '+t+' 10 Z';api.animate(curve,'d',d,d,0,0);api.animate(orb,'cx',20+t,20+t,0,0);return root.render(t)},destroy(){}}}`);
@@ -56,8 +68,8 @@ describe('generated animation contract v1', () => {
 });
 
 interface MessageLike { data: Record<string, unknown> }
-interface FakeElement { tag:string; attrs:Map<string,string>; children:FakeElement[]; style:Record<string,string>; setAttribute(key:string,value:string):void; getAttribute(key:string):string|null; append(child:FakeElement):void; remove():void; readonly outerHTML:string }
-function makeElement(tag:string):FakeElement {const attrs=new Map<string,string>();const children:FakeElement[]=[];return {tag,attrs,children,style:{},setAttribute(key,value){attrs.set(key,String(value))},getAttribute(key){return attrs.get(key)||null},append(child){children.push(child)},remove(){},get outerHTML(){const a=[...attrs].map(([k,v])=>`${k}="${v}"`).join(' ');return `<${tag} ${a}>${children.map(child=>child.outerHTML).join('')}</${tag}>`}};}
+interface FakeElement { tag:string; attrs:Map<string,string>; children:FakeElement[]; parent?:FakeElement; style:Record<string,string>; setAttribute(key:string,value:string):void; getAttribute(key:string):string|null; append(child:FakeElement):void; remove():void; getBBox():{x:number;y:number;width:number;height:number}; readonly outerHTML:string }
+function makeElement(tag:string):FakeElement {const attrs=new Map<string,string>();const children:FakeElement[]=[];return {tag,attrs,children,style:{},setAttribute(key,value){attrs.set(key,String(value))},getAttribute(key){return attrs.get(key)||null},append(child){children.push(child);child.parent=this},remove(){if(this.parent){const index=this.parent.children.indexOf(this as unknown as FakeElement);if(index>=0)this.parent.children.splice(index,1)}},getBBox(){if(tag==='rect'){const x=Number(attrs.get('x')||0),y=Number(attrs.get('y')||0);return {x,y,width:Number(attrs.get('width')||0),height:Number(attrs.get('height')||0)}}if(tag==='circle'){const cx=Number(attrs.get('cx')||0),cy=Number(attrs.get('cy')||0),r=Number(attrs.get('r')||0);return {x:cx-r,y:cy-r,width:2*r,height:2*r}}if(tag==='path'){const pairs=[...String(attrs.get('d')||'').matchAll(/[ML]\s*(-?[\d.]+)\s+(-?[\d.]+)/gi)].map(match=>[Number(match[1]),Number(match[2])]);if(!pairs.length)return {x:0,y:0,width:0,height:0};const xs=pairs.map(pair=>pair[0]),ys=pairs.map(pair=>pair[1]),left=Math.min(...xs),top=Math.min(...ys);return {x:left,y:top,width:Math.max(...xs)-left,height:Math.max(...ys)-top}}if(tag==='g'||tag==='svg'){const boxes=children.map(child=>child.getBBox()).filter(box=>box.width>0&&box.height>0);if(!boxes.length)return {x:0,y:0,width:0,height:0};const left=Math.min(...boxes.map(box=>box.x)),top=Math.min(...boxes.map(box=>box.y)),right=Math.max(...boxes.map(box=>box.x+box.width)),bottom=Math.max(...boxes.map(box=>box.y+box.height));return {x:left,y:top,width:right-left,height:bottom-top}}return {x:0,y:0,width:0,height:0}},get outerHTML(){const a=[...attrs].map(([k,v])=>`${k}="${v}"`).join(' ');return `<${tag} ${a}>${children.map(child=>child.outerHTML).join('')}</${tag}>`}};}
 function runSandbox(code:string){
  const messages:Array<Record<string,unknown>>=[];let handler:((event:MessageLike)=>void)|undefined;
  const fakeWindow={addEventListener(_type:string,fn:(event:MessageLike)=>void){handler=fn}};
