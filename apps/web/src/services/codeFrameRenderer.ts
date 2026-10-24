@@ -99,7 +99,7 @@ export async function createCodeFrameRenderer(code: string, duration: number, fp
           reject: (error) => { signal.removeEventListener('abort', onAbort); reject(error); },
         };
         signal.addEventListener('abort', onAbort, { once: true });
-        iframe.contentWindow?.postMessage({ channel: CHANNEL, type: 'frame', time: timeSeconds }, '*');
+        iframe.contentWindow?.postMessage({ channel: CHANNEL, type: 'frame', time: timeSeconds, width: canvas.width, height: canvas.height }, '*');
       });
       return svg.then(async (markup) => {
         if (signal.aborted) throw new DOMException('Export cancelled.', 'AbortError');
