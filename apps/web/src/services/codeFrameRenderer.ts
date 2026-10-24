@@ -1,4 +1,5 @@
 import { createRuntimeDocument } from './codeRuntime';
+import { CODE_COMPOSITION } from './codeComposition';
 
 const CHANNEL = 'motion-code-v1';
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -21,7 +22,7 @@ export async function createCodeFrameRenderer(code: string, duration: number, fp
   const iframe = document.createElement('iframe');
   iframe.setAttribute('sandbox', 'allow-scripts');
   iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:1920px;height:1080px;opacity:0;pointer-events:none;border:0;';
+  iframe.style.cssText = `position:fixed;left:-10000px;top:0;width:${CODE_COMPOSITION.width}px;height:${CODE_COMPOSITION.height}px;opacity:0;pointer-events:none;border:0;`;
 
   let disposed = false;
   let readyResolve: (() => void) | null = null;

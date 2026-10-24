@@ -14,7 +14,7 @@ export function fitPreviewScale(
     || availableWidth <= 0 || availableHeight <= 0 || compositionWidth <= 0 || compositionHeight <= 0) {
     return 0;
   }
-  return Math.min(1, availableWidth / compositionWidth, availableHeight / compositionHeight);
+  return Math.min(availableWidth / compositionWidth, availableHeight / compositionHeight);
 }
 
 /** Apply a bounded user zoom to the auto-fit scale without changing composition/export dimensions. */
