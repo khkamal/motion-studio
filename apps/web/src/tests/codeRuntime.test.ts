@@ -6,6 +6,12 @@ describe('generated animation contract v1', () => {
     expect(CODE_RUNTIME_VERSION).toBe(1);
     expect(validateAnimationCode(STARTER_ANIMATION)).toBeNull();
   });
+  it('does not reserve scrollbar gutters that shrink the inner composition surface at Fit', () => {
+    const runtime = createRuntimeDocument();
+    expect(runtime).toContain('#preview-viewport{');
+    expect(runtime).toContain('overflow:auto');
+    expect(runtime).not.toContain('scrollbar-gutter');
+  });
   it('rejects empty/oversized source and incomplete factories before execution, while accepting Canvas renderFrame', () => {
     expect(validateAnimationCode('')).toMatch(/empty/);
     expect(validateAnimationCode('export default function createAnimation(api) { return {}; }')).toMatch(/contract v1/);

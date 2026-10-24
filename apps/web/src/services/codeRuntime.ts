@@ -21,7 +21,7 @@ export function validateAnimationCode(code: string): string | null {
 export function createRuntimeDocument(): string {
   return String.raw`<!doctype html>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none';">
-<style>html,body{width:100%;height:100%;margin:0;overflow:hidden}body{background:#0b1020}#preview-viewport{position:relative;box-sizing:border-box;width:100%;height:100%;overflow:auto;scrollbar-gutter:stable both-edges;background:#0b1020}#composition-stage{position:relative;display:grid;place-items:center;box-sizing:border-box}#composition-stage>.composition-surface{position:absolute;top:50%;left:50%;display:block;max-width:none;max-height:none;transform:translate(-50%,-50%);transform-origin:center center;overflow:hidden}</style>
+<style>html,body{width:100%;height:100%;margin:0;overflow:hidden}body{background:#0b1020}#preview-viewport{position:relative;box-sizing:border-box;width:100%;height:100%;overflow:auto;background:#0b1020}#composition-stage{position:relative;display:grid;place-items:center;box-sizing:border-box}#composition-stage>.composition-surface{position:absolute;top:50%;left:50%;display:block;max-width:none;max-height:none;transform:translate(-50%,-50%);transform-origin:center center;overflow:hidden}</style>
 <body><div id="preview-viewport"><div id="composition-stage"></div></div>
 <script>
 const channel='motion-code-v1';
