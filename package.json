@@ -4,7 +4,7 @@
   "type": "module",
   "description": "A production-ready browser-based motion graphics video creator",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --config apps/web/vite.config.ts",
     "build": "tsc && vite build --config apps/web/vite.config.ts",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx",
