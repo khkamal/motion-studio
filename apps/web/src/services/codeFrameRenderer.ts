@@ -1,6 +1,14 @@
 import { createRuntimeDocument } from './codeRuntime';
 
 const CHANNEL = 'motion-code-v1';
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
+export function ensureStandaloneSvg(markup: string): string {
+  const svg = markup.trim();
+  if (!/^<svg\b/i.test(svg)) throw new Error('Generated frame is not an SVG document.');
+  const openingTag = svg.match(/^<svg\b[^>]*>/i)?.[0] ?? '';
+  return /\bxmlns\s*=/.test(openingTag) ? svg : svg.replace(/^<svg\b/i, `<svg xmlns="${SVG_NAMESPACE}"`);
+}
 
 export interface CodeFrameRenderer {
   renderFrame: (canvas: HTMLCanvasElement, timeSeconds: number, signal: AbortSignal) => Promise<void>;
@@ -96,7 +104,8 @@ export async function createCodeFrameRenderer(code: string, duration: number, fp
       return svg.then(async (markup) => {
         if (signal.aborted) throw new DOMException('Export cancelled.', 'AbortError');
         const image = new Image();
-        const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }));
+        const standaloneSvg = ensureStandaloneSvg(markup);
+        const url = URL.createObjectURL(new Blob([standaloneSvg], { type: 'image/svg+xml;charset=utf-8' }));
         try {
           await new Promise<void>((resolve, reject) => {
             image.onload = () => resolve();
