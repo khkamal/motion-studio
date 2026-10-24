@@ -1,0 +1,4 @@
+export interface CompositionTiming { durationSeconds:number; fps:number; totalFrames:number }
+export function compositionTiming(durationSeconds:number,fps:number){if(!Number.isFinite(durationSeconds)||durationSeconds<=0||durationSeconds>120||!Number.isInteger(fps)||fps<=0)throw new Error('Invalid composition timing.');const totalFrames=Math.round(durationSeconds*fps);return {durationSeconds,fps,totalFrames,frameDuration:1/fps};}
+/** Zero-based convention: valid frame indices are 0 through totalFrames - 1. */
+export function frameSample(frameIndex:number,durationSeconds:number,fps:number){const {totalFrames,frameDuration}=compositionTiming(durationSeconds,fps);if(!Number.isInteger(frameIndex)||frameIndex<0||frameIndex>=totalFrames)throw new Error('Frame index is outside the composition.');return {frameIndex,timeSeconds:frameIndex*frameDuration,progress:totalFrames<=1?0:frameIndex/(totalFrames-1)};}

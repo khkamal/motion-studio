@@ -1,0 +1,3 @@
+import { describe, expect, it } from 'vitest';
+import { compositionTiming, frameSample } from '../engine/compositionTiming';
+describe('composition timing (zero-based)',()=>{it('calculates frames and seconds consistently across supported FPS',()=>{for(const fps of [24,25,30,50,60]){const timing=compositionTiming(8,fps);expect(timing.totalFrames).toBe(8*fps);expect(timing.frameDuration).toBe(1/fps);expect(frameSample(fps,8,fps).timeSeconds).toBe(1);expect(frameSample(timing.totalFrames-1,8,fps).timeSeconds).toBeCloseTo(8-1/fps);expect(frameSample(timing.totalFrames-1,8,fps).progress).toBe(1);}});it('rejects invalid frame indices and timing',()=>{expect(()=>compositionTiming(0,30)).toThrow();expect(()=>frameSample(240,8,30)).toThrow();});});
