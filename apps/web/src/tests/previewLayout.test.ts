@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitPreviewScale, fitPreviewToBounds } from '../utils/previewLayout';
+import { fitPreviewScale, fitPreviewToBounds, scalePreviewZoom } from '../utils/previewLayout';
 
 describe('responsive preview sizing', () => {
   it('fits a landscape composition inside a wide but short viewport without cropping', () => {
@@ -25,6 +25,18 @@ describe('responsive preview sizing', () => {
     expect(narrowScale).toBeLessThan(wideScale);
     expect(1920 * narrowScale).toBeLessThanOrEqual(520);
     expect(1080 * narrowScale).toBeLessThanOrEqual(300);
+  });
+
+  it('applies bounded in-preview zoom on top of the responsive auto-fit scale', () => {
+    expect(scalePreviewZoom(0.5, 1)).toBe(0.5);
+    expect(scalePreviewZoom(0.5, 1.5)).toBe(0.75);
+    expect(scalePreviewZoom(0.5, 3)).toBe(1);
+    expect(scalePreviewZoom(0.5, 0.1)).toBe(0.25);
+    expect(scalePreviewZoom(0, 1)).toBe(0);
+  });
+
+  it('does not enlarge a composition beyond its native CSS size when there is extra room', () => {
+    expect(fitPreviewScale(4000, 2400, 1920, 1080)).toBe(1);
   });
 
   it('returns an empty size until the preview has measurable bounds', () => {

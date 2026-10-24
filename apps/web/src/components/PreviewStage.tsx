@@ -5,7 +5,7 @@ import { formatTime } from '../engine/motionEngine';
 import { normalizePlan } from '../engine/planBuilder';
 import { useEditorStore } from '../store/editorStore';
 import { Icon } from './Icon';
-import { fitPreviewScale } from '../utils/previewLayout';
+import { fitPreviewScale, scalePreviewZoom } from '../utils/previewLayout';
 
 const DURATION_CHOICES = [5, 6, 7, 8, 9, 10, 12, 15, 20, 30];
 const FPS_CHOICES = [24, 25, 30, 50, 60] as const;
@@ -30,6 +30,7 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [runtimeError, setRuntimeError] = useState('');
   const [customDuration, setCustomDuration] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState(1);
   const maskSignature = useMemo(() => JSON.stringify({
     layers: plan?.layers.filter((layer) => layer.kind === 'subject').map((layer) => [layer.id, layer.mask]) ?? [],
     subjects: plan?.subjects.map((subject) => [subject.id, subject.region, subject.mask]) ?? [],
@@ -208,11 +209,18 @@ export function PreviewStage({ onUpload }: { onUpload: () => void }) {
           <label className="mini-control"><span>FIT</span><select value={settings.fit} onChange={(event) => useEditorStore.getState().updateSettings({ fit: event.target.value as EditorSettings['fit'] })}>
             <option value="fit">Fit</option><option value="fill">Fill</option><option value="crop">Crop</option><option value="center">Center</option>
           </select></label>
+          <span className="stage-divider" />
+          <div className="preview-zoom-controls" role="group" aria-label="Preview zoom">
+            <button type="button" aria-label="Zoom out preview" title="Zoom out preview" disabled={previewZoom <= 0.5} onClick={() => setPreviewZoom((zoom) => Math.max(0.5, Math.round((zoom - 0.25) * 100) / 100))}>−</button>
+            <span aria-live="polite">{Math.round(previewZoom * 100)}%</span>
+            <button type="button" aria-label="Zoom in preview" title="Zoom in preview" disabled={previewZoom >= 2} onClick={() => setPreviewZoom((zoom) => Math.min(2, Math.round((zoom + 0.25) * 100) / 100))}>+</button>
+            <button type="button" aria-label="Fit preview to window" title="Fit preview to window" onClick={() => setPreviewZoom(1)}>Fit</button>
+          </div>
         </div>
       </div>
 
       <div ref={previewAreaRef} className={`preview-canvas-area ${asset ? '' : 'preview-empty-area'}`}>
-        <div className="canvas-surface" style={{ width: `${settings.width}px`, height: `${settings.height}px`, transform: `translate(-50%, -50%) scale(${previewScale})` }}>
+        <div className="canvas-surface" style={{ width: `${settings.width}px`, height: `${settings.height}px`, transform: `translate(-50%, -50%) scale(${scalePreviewZoom(previewScale, previewZoom)})` }}>
           <canvas ref={canvasRef} aria-label={`Motion preview for ${mainSubject}`} />
           {!asset && <div className="canvas-empty-state"><div className="canvas-empty-orbit"><Icon name="image" size={24} /></div><h2>Bring a still to life.</h2><p>Upload an image to create an editable image-to-motion scene.</p><button className="button-primary" onClick={onUpload}><Icon name="upload" size={15} /> Choose an image</button><span>or drop an image anywhere · Ctrl+V to paste</span></div>}
           {asset && (!plan || !runtimeReady) && <div className="canvas-loading-overlay"><div className="loading-spinner" />{runtimeError || (hasGenerated ? 'Preparing preview and optional local subject mask…' : 'Preparing preview…')}</div>}
