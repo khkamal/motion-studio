@@ -275,6 +275,27 @@ describe('registered pixel masks in the shared renderer', () => {
     provider.dispose();
   });
 
+  it('exports code-driven frames through the supplied deterministic renderer without a photo plan', async () => {
+    installCanvasFakes();
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder as unknown as typeof MediaRecorder);
+    vi.stubGlobal('window', {
+      setTimeout: (callback: TimerHandler) => { if (typeof callback === 'function') queueMicrotask(callback as () => void); return 1; },
+      clearTimeout: vi.fn(),
+    });
+    const times: number[] = [];
+    const result = await exportMotionVideo({
+      settings: { ...DEFAULT_SETTINGS, width: 400, height: 225 },
+      format: 'webm', width: 400, height: 225, duration: 1, fps: 24, quality: 0.5,
+      signal: new AbortController().signal,
+      renderFrame: async (canvas, timeSeconds) => { times.push(timeSeconds); canvas.getContext('2d')?.fillRect(0, 0, 1, 1); },
+      onProgress: () => {},
+    });
+    expect(result.totalFrames).toBe(24);
+    expect(times).toHaveLength(24);
+    expect(times[0]).toBe(0);
+    expect(times[23]).toBeCloseTo(23 / 24);
+  });
+
   it('segments only the primary planned subject automatically while leaving secondary subjects addressable and safe', async () => {
     const plan = buildFallbackPlan({ fileName: 'car.png', width: 100, height: 100, duration: 8, fps: 30, style: '2D' });
     const mainLayer = plan.layers.find((layer) => layer.kind === 'subject')!;

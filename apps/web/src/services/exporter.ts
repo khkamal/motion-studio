@@ -6,8 +6,10 @@ import { createRenderRuntime, disposeRenderRuntime, renderScene } from '../engin
 
 export interface ExportRequest {
   recreate?: RecreateScene | null;
-  asset: MediaAsset;
-  plan: MotionPlan;
+  asset?: MediaAsset;
+  plan?: MotionPlan;
+  /** Optional deterministic frame painter for code-driven compositions. */
+  renderFrame?: (canvas: HTMLCanvasElement, timeSeconds: number, signal: AbortSignal) => void | Promise<void>;
   settings: EditorSettings;
   format: VideoFormat;
   width: number;
@@ -68,7 +70,17 @@ async function yieldToBrowser() {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-async function exportMp4(sceneCanvas: HTMLCanvasElement, scene: Parameters<typeof renderScene>[0], request: ExportRequest, frames: number, startedAt: number): Promise<ExportResult> {
+async function renderExportFrame(sceneCanvas: HTMLCanvasElement, scene: Parameters<typeof renderScene>[0] | null, request: ExportRequest, frameIndex: number): Promise<void> {
+  throwIfAborted(request.signal);
+  if (request.renderFrame) {
+    await request.renderFrame(sceneCanvas, frameIndex / request.fps, request.signal);
+    return;
+  }
+  if (!scene) throw new Error('No animation renderer is available for export.');
+  renderScene(scene, frameTime(frameIndex, request.fps));
+}
+
+async function exportMp4(sceneCanvas: HTMLCanvasElement, scene: Parameters<typeof renderScene>[0] | null, request: ExportRequest, frames: number, startedAt: number): Promise<ExportResult> {
   if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') throw new Error('MP4 export requires WebCodecs in this browser. Choose WebM or use a supported Chromium browser.');
   const baseConfiguration: Omit<VideoEncoderConfig, 'codec'> = {
     width: sceneCanvas.width,
@@ -103,7 +115,7 @@ async function exportMp4(sceneCanvas: HTMLCanvasElement, scene: Parameters<typeo
   try {
     for (let frameIndex = 0; frameIndex < frames; frameIndex += 1) {
       throwIfAborted(request.signal);
-      renderScene(scene, frameTime(frameIndex, request.fps));
+      await renderExportFrame(sceneCanvas, scene, request, frameIndex);
       const frame = new VideoFrame(sceneCanvas, {
         timestamp: Math.round(frameIndex * 1_000_000 / request.fps),
         duration: frameDuration,
@@ -163,7 +175,7 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function exportWebm(sceneCanvas: HTMLCanvasElement, scene: Parameters<typeof renderScene>[0], request: ExportRequest, frames: number, startedAt: number): Promise<ExportResult> {
+async function exportWebm(sceneCanvas: HTMLCanvasElement, scene: Parameters<typeof renderScene>[0] | null, request: ExportRequest, frames: number, startedAt: number): Promise<ExportResult> {
   if (typeof MediaRecorder === 'undefined' || typeof sceneCanvas.captureStream !== 'function') {
     throw new Error('WebM export is not available in this browser. Try Chrome, Edge, or Firefox with MediaRecorder support.');
   }
@@ -198,7 +210,7 @@ async function exportWebm(sceneCanvas: HTMLCanvasElement, scene: Parameters<type
         const due = wallStart + frameIndex * interval;
         await wait(Math.max(0, due - performance.now()), request.signal);
       }
-      renderScene(scene, frameTime(frameIndex, request.fps));
+      await renderExportFrame(sceneCanvas, scene, request, frameIndex);
       track?.requestFrame?.();
       request.onProgress(frameIndex + 1, frames, performance.now() - startedAt);
     }
@@ -226,6 +238,7 @@ async function exportWebm(sceneCanvas: HTMLCanvasElement, scene: Parameters<type
 }
 
 export async function exportMotionVideo(request: ExportRequest): Promise<ExportResult> {
+  if (!request.renderFrame && (!request.asset || !request.plan)) throw new Error('Upload an image and generate a motion plan, or provide a code animation renderer.');
   if (request.width < 16 || request.height < 16 || request.width > 7680 || request.height > 7680) throw new Error('Export dimensions are outside the supported range.');
   const frames = totalFrames(request.duration, request.fps);
   if (!frames || frames > 10_000) throw new Error('The selected duration and FPS create an unsupported frame count.');
@@ -236,8 +249,14 @@ export async function exportMotionVideo(request: ExportRequest): Promise<ExportR
   exportCanvas.height = request.height;
   let runtime: Awaited<ReturnType<typeof createRenderRuntime>> | null = null;
   try {
-    runtime = await createRenderRuntime(request.asset, request.plan, settings, request.recreate ? null : undefined, request.signal);
-    const scene = { canvas: exportCanvas, plan: request.plan, settings, runtime, showTransparencyGrid: false, recreate: request.recreate ?? null };
+    let scene: Parameters<typeof renderScene>[0] | null = null;
+    if (!request.renderFrame) {
+      const asset = request.asset;
+      const plan = request.plan;
+      if (!asset || !plan) throw new Error('Upload an image and generate a motion plan before exporting.');
+      runtime = await createRenderRuntime(asset, plan, settings, request.recreate ? null : undefined, request.signal);
+      scene = { canvas: exportCanvas, plan, settings, runtime, showTransparencyGrid: false, recreate: request.recreate ?? null };
+    }
     throwIfAborted(request.signal);
     if (request.format === 'mp4') return await exportMp4(exportCanvas, scene, request, frames, startedAt);
     return await exportWebm(exportCanvas, scene, request, frames, startedAt);
