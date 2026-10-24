@@ -10,6 +10,8 @@ interface InspectorProps {
   apiConfigured: boolean;
   onGenerate: () => void;
   onLegacyGenerate: () => void;
+  looping: boolean;
+  onLoopingChange: (looping: boolean) => void;
   onManualPrompt: (prompt: string) => void;
   onOpenKeys: () => void;
   onNewIdea: () => void;
@@ -23,7 +25,7 @@ function PrioritySlider({ label, value, onChange, detail, color = 'blue', onStar
   </label>;
 }
 
-function MotionPanel({ isGenerating, apiConfigured, onGenerate, onLegacyGenerate, onManualPrompt, onNewIdea }: InspectorProps) {
+function MotionPanel({ isGenerating, apiConfigured, onGenerate, onLegacyGenerate, looping, onLoopingChange, onManualPrompt, onNewIdea }: InspectorProps) {
   const plan = useEditorStore((state) => state.plan);
   const settings = useEditorStore((state) => state.settings);
   const [prompt, setPrompt] = useState('');
@@ -62,7 +64,7 @@ function MotionPanel({ isGenerating, apiConfigured, onGenerate, onLegacyGenerate
         <span className="section-chip">{ideaStatus === 'loading' ? 'WRITING…' : ideaStatus === 'ai' ? 'GEMINI IDEA' : ideaStatus === 'local' ? 'LOCAL IDEA' : 'YOUR IDEA'}</span>
       </div>
       <textarea className="manual-prompt-input" rows={5} maxLength={4000} value={directionPrompt} disabled={false} onChange={(event) => useEditorStore.getState().setDirectionPrompt(event.target.value)} placeholder={ideaStatus === 'loading' ? 'Gemini is analyzing your reference and suggesting an idea…' : 'Describe the animation, e.g. “Reveal my logo with a thin stroke draw-on, then gently stagger the wordmark. Finish on a still hold.” An uploaded image is optional visual guidance.'} />
-      <div className="prompt-composition"><label>Duration (sec)<input type="number" min="1" max="120" value={settings.duration} onChange={(event) => useEditorStore.getState().updateSettings({ duration: Math.max(1, Math.min(120, Number(event.target.value) || 1)) })} /></label><span>{settings.fps} FPS · {settings.width} × {settings.height} · {Math.round(settings.duration * settings.fps)} frames</span></div>
+      <div className="prompt-composition"><label>Duration (sec)<input type="number" min="1" max="120" value={settings.duration} onChange={(event) => useEditorStore.getState().updateSettings({ duration: Math.max(1, Math.min(120, Number(event.target.value) || 1)) })} /></label><span>{settings.fps} FPS · {settings.width} × {settings.height} · {Math.round(settings.duration * settings.fps)} frames</span><label className="prompt-loop"><input type="checkbox" checked={looping} onChange={event=>onLoopingChange(event.target.checked)} /> Seamless loop</label></div>
       <div className="prompt-examples"><button onClick={() => useEditorStore.getState().setDirectionPrompt('')}>Clear prompt</button> · <button onClick={onNewIdea} disabled={ideaStatus === 'loading' || !useEditorStore.getState().asset}>Suggest idea from reference</button></div>
     </div>
     <button className="generate-motion-button" onClick={onGenerate} disabled={isGenerating}>
