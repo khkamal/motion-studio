@@ -38,6 +38,12 @@ describe('generated animation contract v1', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(){api.rect(root,10,10,20,20,{})},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
   });
+  it('supports a real SVG path and circle primitive in the generated scene', () => {
+    const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{}),curve=api.path(root,'M 0 0 L 10 10 Z',{fill:'none',stroke:'#00d4ff',strokeWidth:3}),orb=api.circle(root,20,20,8,{fill:'#fff'});return {duration:8,render(t){const d='M 0 0 L '+t+' 10 Z';api.animate(curve,'d',d,d,0,0);api.animate(orb,'cx',20+t,20+t,0,0);return root.render(t)},destroy(){}}}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
+    expect(sandbox.messages[0].svg).toContain('<path');
+    expect(sandbox.messages[0].svg).toContain('<circle');
+  });
   it('explains when render returns a value that cannot be converted to SVG', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){api.svg(800,450,{});return {duration:8,render(){return 7},destroy(){}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'error',message:expect.stringContaining('Got number')});
