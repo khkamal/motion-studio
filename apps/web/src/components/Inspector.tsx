@@ -9,6 +9,7 @@ interface InspectorProps {
   isGenerating: boolean;
   apiConfigured: boolean;
   onGenerate: () => void;
+  onLegacyGenerate: () => void;
   onManualPrompt: (prompt: string) => void;
   onOpenKeys: () => void;
   onNewIdea: () => void;
@@ -22,7 +23,7 @@ function PrioritySlider({ label, value, onChange, detail, color = 'blue', onStar
   </label>;
 }
 
-function MotionPanel({ isGenerating, apiConfigured, onGenerate, onManualPrompt, onOpenKeys, onNewIdea }: InspectorProps) {
+function MotionPanel({ isGenerating, apiConfigured, onGenerate, onLegacyGenerate, onManualPrompt, onNewIdea }: InspectorProps) {
   const plan = useEditorStore((state) => state.plan);
   const settings = useEditorStore((state) => state.settings);
   const [prompt, setPrompt] = useState('');
@@ -56,19 +57,21 @@ function MotionPanel({ isGenerating, apiConfigured, onGenerate, onManualPrompt, 
       ))}
     </div>
     {generationMode !== 'animate' && recreateScene && <div className="inline-ai-notice"><span className="status-dot" /><span>{recreateScene.title} · {recreateScene.elements.length} elements. Edit with a prompt below, e.g. “slower headline, add glow”.</span></div>}
-    {generationMode !== 'animate' && <div className="direction-field" style={{ margin: '8px 0' }}>
+    <div className="direction-field" style={{ margin: '8px 0' }}>
       <div className="section-title-row"><h3>MOTION IDEA</h3>
         <span className="section-chip">{ideaStatus === 'loading' ? 'WRITING…' : ideaStatus === 'ai' ? 'GEMINI IDEA' : ideaStatus === 'local' ? 'LOCAL IDEA' : 'YOUR IDEA'}</span>
       </div>
-      <textarea className="manual-prompt-input" rows={5} maxLength={800} value={directionPrompt} disabled={false} onChange={(event) => useEditorStore.getState().setDirectionPrompt(event.target.value)} placeholder={ideaStatus === 'loading' ? 'Gemini is reading your image and writing a motion idea…' : 'Describe the motion in your own words, e.g. the arrows spin continuously and the cloud pulses slowly.'} />
-      <div className="prompt-examples">Edit the idea if you like, then press the button. <button onClick={onNewIdea} disabled={ideaStatus === 'loading' || !useEditorStore.getState().asset}>New idea</button></div>
-    </div>}
-    <button className="generate-motion-button" onClick={onGenerate} disabled={isGenerating || !useEditorStore.getState().asset}>
+      <textarea className="manual-prompt-input" rows={5} maxLength={4000} value={directionPrompt} disabled={false} onChange={(event) => useEditorStore.getState().setDirectionPrompt(event.target.value)} placeholder={ideaStatus === 'loading' ? 'Gemini is analyzing your reference and suggesting an idea…' : 'Describe the animation, e.g. “Reveal my logo with a thin stroke draw-on, then gently stagger the wordmark. Finish on a still hold.” An uploaded image is optional visual guidance.'} />
+      <div className="prompt-composition"><label>Duration (sec)<input type="number" min="1" max="120" value={settings.duration} onChange={(event) => useEditorStore.getState().updateSettings({ duration: Math.max(1, Math.min(120, Number(event.target.value) || 1)) })} /></label><span>{settings.fps} FPS · {settings.width} × {settings.height} · {Math.round(settings.duration * settings.fps)} frames</span></div>
+      <div className="prompt-examples"><button onClick={() => useEditorStore.getState().setDirectionPrompt('')}>Clear prompt</button> · <button onClick={onNewIdea} disabled={ideaStatus === 'loading' || !useEditorStore.getState().asset}>Suggest idea from reference</button></div>
+    </div>
+    <button className="generate-motion-button" onClick={onGenerate} disabled={isGenerating}>
       {isGenerating ? <span className="loading-spinner small" /> : <Icon name="sparkles" size={16} />}
-      <span>{isGenerating ? 'Analyzing image…' : generationMode === 'animate' ? 'Generate Motion' : (recreateScene ? 'Recreate with this idea' : 'Recreate as Motion Graphic')}</span>
+      <span>{isGenerating ? 'Generating animation code…' : 'Generate animation'}</span>
       {!isGenerating && <span className="generate-arrow"><Icon name="arrow" size={14} /></span>}
     </button>
-    {!apiConfigured && <div className="inline-ai-notice"><span className="status-dot" /><span>Using deterministic local draft. <button onClick={onOpenKeys}>Add Gemini key</button> for vision analysis.</span></div>}
+    <div className="prompt-examples">Image-based legacy workflow: <button onClick={onLegacyGenerate} disabled={isGenerating || !useEditorStore.getState().asset}>Use structured motion plan</button></div>
+    <div className="inline-ai-notice"><span className="status-dot" /><span>AI code generation uses the server API configuration. The Generate panel reports if it is unavailable.</span></div>
 
     {plan && generationMode === 'animate' && <>
       <div className="motion-concept-card">

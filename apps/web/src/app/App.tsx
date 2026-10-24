@@ -49,6 +49,7 @@ export function App() {
   const plan = useEditorStore((state) => state.plan);
   const settings = useEditorStore((state) => state.settings);
   const selectedSubjectType = useEditorStore((state) => state.selectedSubjectType);
+  const directionPrompt = useEditorStore((state) => state.directionPrompt);
   const projectName = useEditorStore((state) => state.projectName);
   const isDirty = useEditorStore((state) => state.isDirty);
   const apiKeys = useEditorStore((state) => state.apiKeys);
@@ -205,7 +206,6 @@ export function App() {
       store.setActiveLayer('subject_1');
       store.setDirty(true);
       notify(`Loaded ${nextAsset.name} · ${nextAsset.width} × ${nextAsset.height}`);
-      void requestIdea();
     } catch (error) {
       notify(error instanceof Error ? error.message : 'The image could not be loaded.');
     }
@@ -440,14 +440,14 @@ export function App() {
     <main className="studio-grid">
       <SourcePanel asset={asset} settings={settings} subjectType={selectedSubjectType} onPick={handlePickImage} onRemove={handleRemoveImage} onTypeChange={(type) => useEditorStore.getState().setSelectedSubjectType(type)} onSettingsChange={updateSettings} />
       <div className="workspace-and-timeline"><PreviewStage onUpload={handlePickImage} /><Timeline /></div>
-      <div><button className="button-secondary code-studio-launch" onClick={() => setShowCodeStudio(true)}>Create with animation code</button><Inspector isGenerating={isGenerating} apiConfigured={Boolean(activeConfig)} onGenerate={handleGenerate} onNewIdea={() => void requestIdea(useEditorStore.getState().directionPrompt)} onManualPrompt={handleManualPrompt} onOpenKeys={() => setShowKeyModal(true)} /></div>
+      <div><Inspector isGenerating={isGenerating} apiConfigured={Boolean(activeConfig)} onGenerate={() => setShowCodeStudio(true)} onLegacyGenerate={handleGenerate} onNewIdea={() => void requestIdea(useEditorStore.getState().directionPrompt)} onManualPrompt={handleManualPrompt} onOpenKeys={() => setShowKeyModal(true)} /></div>
     </main>
     <input ref={imageInputRef} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" onChange={(event) => { const files = event.target.files ? Array.from(event.target.files) : []; if (files.length) void handleImageFiles(files); event.currentTarget.value = ''; }} />
     <input ref={projectInputRef} className="hidden-file-input" type="file" accept=".motion,application/vnd.motion-studio.project+json,application/json" onChange={(event) => { void handleOpenProjectFile(event.target.files?.[0]); event.currentTarget.value = ''; }} />
     {(generationError || storageWarning) && <div className="bottom-alert"><Icon name="alert" size={14} /><span>{generationError || storageWarning}</span><button onClick={() => { useEditorStore.getState().setGenerationError(''); setStorageWarning(''); }} aria-label="Dismiss message"><Icon name="close" size={13} /></button></div>}
     {toast && <div className="toast-notification"><span className="toast-check"><Icon name="check" size={13} /></span>{toast}</div>}
     {dragging && <div className="drop-overlay"><div><Icon name="upload" size={22} /><strong>Drop image to replace source</strong><span>PNG · JPG · WebP · SVG</span></div></div>}
-    <CodeStudio open={showCodeStudio} onClose={() => setShowCodeStudio(false)} image={asset?.blob ?? null} />
+    <CodeStudio open={showCodeStudio} onClose={() => setShowCodeStudio(false)} image={asset?.blob ?? null} prompt={directionPrompt} onPromptChange={(value) => useEditorStore.getState().setDirectionPrompt(value)} duration={settings.duration} fps={settings.fps} width={settings.width} height={settings.height} onDurationChange={(duration) => useEditorStore.getState().updateSettings({ duration })} />
     <ApiKeysModal open={showKeyModal} onClose={() => setShowKeyModal(false)} onPersist={(configs, activeId) => {
       try {
         saveApiConfigs(configs, activeId);

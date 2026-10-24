@@ -102,7 +102,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setHasGenerated: (hasGenerated) => set({ hasGenerated }),
   setRecreateScene: (recreateScene) => set({ recreateScene, currentTime: 0, isPlaying: false, isDirty: true }),
   setGenerationMode: (generationMode) => set({ generationMode }),
-  setDirectionPrompt: (directionPrompt) => set({ directionPrompt: directionPrompt.slice(0, 800), ideaEdited: true }),
+  setDirectionPrompt: (directionPrompt) => set({ directionPrompt: directionPrompt.slice(0, 4000), ideaEdited: true }),
   beginIdea: () => set((s) => ({ ideaStatus: 'loading', ideaEdited: false, directionPrompt: s.ideaEdited ? s.directionPrompt : '' })),
   setIdea: (text, source) => set((s) => (s.ideaEdited ? { ideaStatus: source } : { directionPrompt: text.slice(0, 800), ideaStatus: source, ideaEdited: false })),
   clearScene: () => set({ asset: null, plan: null, recreateScene: null, hasGenerated: false, currentTime: 0, isPlaying: false, generationMessage: '', generationError: '', undoStack: [], redoStack: [], isDirty: true }),
