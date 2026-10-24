@@ -30,6 +30,18 @@ describe('generated animation contract v1', () => {
     sandbox.send({data:{channel:'motion-code-v1',type:'seek',frameIndex:120}});expect(sandbox.messages[sandbox.messages.length-1]).toMatchObject({type:'tick',frameIndex:120,timeSeconds:4});
     sandbox.send({data:{channel:'motion-code-v1',type:'play'}});expect(sandbox.messages[sandbox.messages.length-1]).toMatchObject({type:'tick',playing:true});
   });
+  it('accepts an SVG root wrapper returned directly instead of serialized markup', () => {
+    const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(){return root},destroy(){}}}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
+  });
+  it('falls back to the active SVG root when render mutates it but returns nothing', () => {
+    const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{});return {duration:8,render(){api.rect(root,10,10,20,20,{})},destroy(){}}}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'ready',duration:8});
+  });
+  it('explains when render returns a value that cannot be converted to SVG', () => {
+    const sandbox=runSandbox(`export default function createAnimation(api){api.svg(800,450,{});return {duration:8,render(){return 7},destroy(){}}}`);
+    expect(sandbox.messages[0]).toMatchObject({type:'error',message:expect.stringContaining('Got number')});
+  });
   it('returns a runtime error for invalid negative timing rather than crashing silently', () => {
     const sandbox=runSandbox(`export default function createAnimation(api){const root=api.svg(800,450,{}),node=api.rect(root,0,0,10,10,{});return {duration:8,render(t){api.animate(node,'x',0,1,0,-1,'linear');return root.render(t)}}}`);
     expect(sandbox.messages[0]).toMatchObject({type:'error'});
