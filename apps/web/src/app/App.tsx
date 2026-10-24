@@ -65,6 +65,7 @@ export function App() {
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showCodeStudio, setShowCodeStudio] = useState(false);
+  const [codeAnimationCode, setCodeAnimationCode] = useState('');
   const [codeLooping, setCodeLooping] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [toast, setToast] = useState('');
@@ -442,8 +443,8 @@ export function App() {
     />
     <main className="studio-grid">
       <SourcePanel asset={asset} settings={settings} subjectType={selectedSubjectType} onPick={handlePickImage} onRemove={handleRemoveImage} onTypeChange={(type) => useEditorStore.getState().setSelectedSubjectType(type)} onSettingsChange={updateSettings} />
-      <div className="workspace-and-timeline">{showCodeStudio ? <CodeStudio open onClose={() => setShowCodeStudio(false)} image={asset?.blob ?? null} apiKeys={codeGenerationKeys} model={codeGenerationModel} prompt={directionPrompt} duration={settings.duration} fps={settings.fps} width={settings.width} height={settings.height} looping={codeLooping} /> : <PreviewStage onUpload={handlePickImage} />}<Timeline /></div>
-      <div><Inspector isGenerating={isGenerating} apiConfigured={Boolean(activeConfig)} onGenerate={() => setShowCodeStudio(true)} onLegacyGenerate={handleGenerate} looping={codeLooping} onLoopingChange={setCodeLooping} onNewIdea={() => void requestIdea(useEditorStore.getState().directionPrompt)} onManualPrompt={handleManualPrompt} onOpenKeys={() => setShowKeyModal(true)} /></div>
+      <div className="workspace-and-timeline">{showCodeStudio ? <CodeStudio open onClose={() => setShowCodeStudio(false)} onCodeChange={setCodeAnimationCode} image={asset?.blob ?? null} apiKeys={codeGenerationKeys} model={codeGenerationModel} prompt={directionPrompt} duration={settings.duration} fps={settings.fps} width={settings.width} height={settings.height} looping={codeLooping} /> : <PreviewStage onUpload={handlePickImage} />}<Timeline /></div>
+      <div><Inspector isGenerating={isGenerating} apiConfigured={Boolean(activeConfig)} onGenerate={() => { setCodeAnimationCode(''); setShowCodeStudio(true); }} onLegacyGenerate={handleGenerate} looping={codeLooping} onLoopingChange={setCodeLooping} onNewIdea={() => void requestIdea(useEditorStore.getState().directionPrompt)} onManualPrompt={handleManualPrompt} onOpenKeys={() => setShowKeyModal(true)} /></div>
     </main>
     <input ref={imageInputRef} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" onChange={(event) => { const files = event.target.files ? Array.from(event.target.files) : []; if (files.length) void handleImageFiles(files); event.currentTarget.value = ''; }} />
     <input ref={projectInputRef} className="hidden-file-input" type="file" accept=".motion,application/vnd.motion-studio.project+json,application/json" onChange={(event) => { void handleOpenProjectFile(event.target.files?.[0]); event.currentTarget.value = ''; }} />
@@ -458,6 +459,6 @@ export function App() {
         notify(error instanceof Error ? error.message : 'Could not save Gemini configuration.');
       }
     }} />
-    <ExportModal open={showExportModal} onClose={() => setShowExportModal(false)} capabilities={capabilities} />
+    <ExportModal open={showExportModal} onClose={() => setShowExportModal(false)} capabilities={capabilities} codeAnimation={showCodeStudio ? codeAnimationCode : null} />
   </div>;
 }
